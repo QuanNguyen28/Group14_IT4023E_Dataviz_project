@@ -76,7 +76,7 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
         marker=dict(line=dict(color="rgba(255,255,255,.72)", width=1)),
         hovertemplate="<b>%{label}</b><br>%{value:.2f} Mt<extra></extra>",
     )
-    return apply_common_layout(fig, 390)
+    return apply_common_layout(fig, 392)
 
 
 def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = "Top Countries"):
@@ -98,7 +98,7 @@ def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = 
     ))
     fig.update_layout(title=title, xaxis_title=unit, yaxis_title="", bargap=0.34)
     fig.update_yaxes(categoryorder="array", categoryarray=work["country"].tolist())
-    return apply_common_layout(fig, 360)
+    return _with_chart_margins(apply_common_layout(fig, 360), l=132, r=56, t=56, b=44)
 
 
 def create_annotated_global_line(df: pd.DataFrame, metric: str = "co2"):
@@ -243,35 +243,62 @@ def create_fastest_increasing_bar(df: pd.DataFrame):
 
 
 def create_fastest_declining_bar(df: pd.DataFrame):
-    return _trend_bar(df, "Fastest Declining Countries", "#B23A48")
+    return _trend_bar(df, "Fastest Declining Countries", "#16834A")
+
+
+def _short_country_label(country: str, max_len: int = 16) -> str:
+    aliases = {
+        "Democratic Republic of Congo": "DR Congo",
+        "Dominican Republic": "Dominican Rep.",
+        "United Kingdom": "United Kingdom",
+        "United States": "United States",
+    }
+    label = aliases.get(str(country), str(country))
+    return label if len(label) <= max_len else f"{label[:max_len - 1]}..."
 
 
 def _trend_bar(df: pd.DataFrame, title: str, color: str):
     if df.empty or "co2_cagr" not in df.columns:
         return _empty(title)
-    work = df.sort_values("co2_cagr", ascending=True).copy()
-    values = work["co2_cagr"]
+    work = df.dropna(subset=["co2_cagr"]).copy()
+    if work.empty:
+        return _empty(title)
+    work["magnitude"] = work["co2_cagr"].abs()
+    work = work.sort_values("magnitude", ascending=True)
+    values = work["magnitude"]
+    if values.max() <= 0:
+        return _empty(title)
+    labels = [f"{v*100:+.1f}%" for v in work["co2_cagr"]]
+    country_labels = [_short_country_label(country) for country in work["country"]]
+    bar_color = [_hex_to_rgba(color, 0.86 + (i / max(len(work) - 1, 1)) * 0.12) for i in range(len(work))]
     fig = go.Figure(go.Bar(
         x=values,
-        y=work["country"],
+        y=country_labels,
         orientation="h",
-        marker=dict(color=color, line=dict(color="rgba(255,255,255,.88)", width=1)),
-        text=[f"{v*100:.1f}%" for v in values],
+        marker=dict(color=bar_color, line=dict(color="rgba(255,255,255,.92)", width=1)),
+        text=labels,
         textposition="outside",
         cliponaxis=False,
-        hovertemplate="<b>%{y}</b><br>CAGR: %{x:.2%}<extra></extra>",
+        customdata=np.stack([work["country"], work["co2_cagr"]], axis=-1),
+        hovertemplate="<b>%{customdata[0]}</b><br>CAGR: %{customdata[1]:+.2%}<extra></extra>",
     ))
-    if values.max() <= 0:
-        x_range = [values.min() * 1.32, 0]
-    elif values.min() >= 0:
-        x_range = [0, values.max() * 1.32]
-    else:
-        spread = max(abs(values.min()), abs(values.max())) * 1.25
-        x_range = [-spread, spread]
-    fig.update_xaxes(tickformat=".0%", range=x_range)
-    fig.update_layout(title=title, xaxis_title="CAGR", yaxis_title="", bargap=0.34)
-    fig.update_yaxes(tickfont=dict(size=10))
-    return _with_chart_margins(apply_common_layout(fig, 380), l=150, r=58, t=72, b=58)
+    tickformat = ".1%" if values.max() < 0.01 else ".0%"
+    fig.update_xaxes(tickformat=tickformat, range=[0, values.max() * 1.42], nticks=4)
+    fig.update_yaxes(categoryorder="array", categoryarray=country_labels, tickfont=dict(size=10))
+    fig.update_layout(
+        title=title,
+        xaxis_title="CAGR magnitude",
+        yaxis_title="",
+        bargap=0.42,
+        showlegend=False,
+    )
+    fig = apply_common_layout(fig, 390)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=15, color=NAVY), x=0.02, y=0.97),
+        xaxis_title=dict(text="CAGR magnitude", font=dict(size=11)),
+    )
+    fig.update_xaxes(showgrid=True, zeroline=False)
+    return _with_chart_margins(fig, l=92, r=62, t=62, b=50)
 
 
 def create_fuel_decomposition_area(fuel_long: pd.DataFrame, country: str):

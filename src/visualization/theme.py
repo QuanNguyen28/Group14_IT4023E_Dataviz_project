@@ -22,9 +22,9 @@ def apply_common_layout(fig, height: int = 360):
     fig.update_layout(
         template=PLOTLY_TEMPLATE,
         height=height,
-        margin=dict(l=18, r=18, t=72, b=74),
-        font=dict(family=FONT_FAMILY, color=TEXT, size=13),
-        title=dict(font=dict(size=16, color=TEXT, family=FONT_FAMILY), x=0.02, xanchor="left", y=0.96),
+        margin=dict(l=18, r=18, t=58, b=54),
+        font=dict(family=FONT_FAMILY, color=TEXT, size=12),
+        title=dict(font=dict(size=14, color=TEXT, family=FONT_FAMILY), x=0.015, xanchor="left", y=0.965),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor=PLOT_BG,
         hovermode="closest",
@@ -33,13 +33,13 @@ def apply_common_layout(fig, height: int = 360):
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.16,
+            y=-0.12,
             xanchor="left",
             x=0,
             bgcolor="rgba(255,255,255,.72)",
             bordercolor="#D8E2EE",
             borderwidth=1,
-            font=dict(size=11),
+            font=dict(size=10),
             title=dict(font=dict(size=11, color=MUTED)),
         ),
         coloraxis_colorbar=dict(
@@ -54,14 +54,14 @@ def apply_common_layout(fig, height: int = 360):
         gridcolor=PLOT_GRID,
         zeroline=False,
         linecolor="#D7E0ED",
-        tickfont=dict(color=MUTED, size=11),
-        title_font=dict(color=MUTED, size=12),
+        tickfont=dict(color=MUTED, size=10),
+        title_font=dict(color=MUTED, size=11),
     )
     fig.update_yaxes(
         showgrid=False,
         zeroline=False,
         linecolor="#D7E0ED",
-        tickfont=dict(color=MUTED, size=11),
-        title_font=dict(color=MUTED, size=12),
+        tickfont=dict(color=MUTED, size=10),
+        title_font=dict(color=MUTED, size=11),
     )
     return fig

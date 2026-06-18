@@ -19,7 +19,7 @@ from src.visualization.charts import (
     create_bubble_scatter, create_fastest_declining_bar, create_fastest_increasing_bar,
     create_fuel_decomposition_area, create_fuel_share_change_table_or_panel,
 )
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header, single_insight
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -85,15 +85,19 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
     top_left, top_mid, top_right = st.columns([1.55, .78, .78])
     with top_left:
         st.plotly_chart(create_bubble_scatter(trends, y_metric), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Top-right countries combine high emissions with fast growth and need priority attention.")
     with top_mid:
         st.plotly_chart(create_fastest_increasing_bar(increasing), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Emerging fast movers may shape future emissions.")
     with top_right:
         st.plotly_chart(create_fastest_declining_bar(declining), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Declining countries show where reductions are already visible.")
 
     section_header("Fuel Mix Decomposition", "A 100 percent stacked area chart shows how the selected country's emissions sources are changing.", "Decomposition")
     bottom_left, bottom_right = st.columns([1.65, .75])
     with bottom_left:
         st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_country), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Fuel mix shares reveal which sources are driving the selected country.")
     with bottom_right:
         st.plotly_chart(create_fuel_share_change_table_or_panel(fuel_change), width="stretch", config=PLOTLY_CONFIG)
         insight_list(generate_page_3_insights(increasing, declining, fuel_change, selected_country), "Trend Insights")

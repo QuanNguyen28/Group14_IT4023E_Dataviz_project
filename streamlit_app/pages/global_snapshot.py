@@ -17,7 +17,7 @@ from src.analysis.trends import generate_page_1_insights
 from src.visualization.charts import create_top_emitters_bar, create_treemap
 from src.visualization.maps import create_choropleth_map
 from streamlit_app.components.kpi_cards import render_kpis
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header, single_insight
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -69,8 +69,10 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     left, right = st.columns([1.25, 1])
     with left:
         st.plotly_chart(create_choropleth_map(filtered, year, metric), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Use the map to compare country-level distribution across the selected metric.")
     with right:
         st.plotly_chart(create_treemap(filtered, compute_regional_totals(aggregate_df, year), year), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Regional blocks show which parts of the world dominate the selected year.")
 
     top = get_top_emitters(filtered, year, metric, 10)
     regional = compute_regional_totals(aggregate_df, year)
@@ -78,5 +80,6 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     bottom_left, bottom_right = st.columns([1.45, 1])
     with bottom_left:
         st.plotly_chart(create_top_emitters_bar(top, metric, f"Top 10 Countries by {metric_label}"), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("The top emitters concentrate a large share of global CO2 emissions.")
     with bottom_right:
         insight_list(generate_page_1_insights(kpis, top, regional, selected_country))

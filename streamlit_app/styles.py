@@ -23,11 +23,11 @@ CSS = """
     --blue: #2F6DE1;
     --purple: #7C5CDB;
     --teal: #118A8A;
-    --radius-lg: 18px;
-    --radius-md: 14px;
-    --radius-sm: 10px;
-    --shadow-soft: 0 12px 32px rgba(11, 28, 48, .08);
-    --shadow-medium: 0 20px 44px rgba(11, 28, 48, .12);
+    --radius-lg: 10px;
+    --radius-md: 8px;
+    --radius-sm: 6px;
+    --shadow-soft: 0 8px 22px rgba(11, 28, 48, .06);
+    --shadow-medium: 0 14px 32px rgba(11, 28, 48, .10);
 }
 
 #MainMenu, footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { visibility: hidden; }
@@ -45,15 +45,21 @@ CSS = """
     color: var(--ink-900);
 }
 .block-container {
-    padding: 1rem 1.18rem 1.7rem 1.18rem;
+    padding: .28rem .72rem 1rem .72rem;
     max-width: 100%;
+}
+div[data-testid="stHorizontalBlock"] {
+    gap: .58rem;
+}
+div[data-testid="column"] {
+    min-width: 0;
 }
 
 h1, h2, h3, h4, h5, h6 {
     color: var(--ink-900);
     letter-spacing: 0;
 }
-h1 { font-size: 1.9rem; margin: 0; line-height: 1.04; font-weight: 900; }
+h1 { font-size: 1.55rem; margin: 0; line-height: 1.04; font-weight: 900; }
 h2 { font-size: 1.15rem; font-weight: 850; }
 h3 { font-size: .98rem; text-transform: uppercase; font-weight: 900; }
 
@@ -65,9 +71,12 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid rgba(34,197,94,.32);
     box-shadow: 14px 0 42px rgba(16, 105, 60, .16);
 }
+section[data-testid="stSidebar"] > div {
+    width: 258px !important;
+}
 section[data-testid="stSidebar"] .block-container,
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-    gap: .62rem;
+    gap: .46rem;
 }
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] .stMarkdown h3 {
@@ -92,7 +101,8 @@ section[data-testid="stSidebar"] .stMultiSelect input {
     font-weight: 760 !important;
 }
 section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-    border-radius: 12px;
+    min-height: 40px;
+    border-radius: 8px;
     border: 1px solid rgba(22,163,74,.36);
     background: linear-gradient(180deg, #FFFFFF 0%, #F1FFF6 100%) !important;
     box-shadow: 0 10px 22px rgba(16,105,60,.11), inset 0 1px 0 rgba(255,255,255,.9);
@@ -136,12 +146,12 @@ section[data-testid="stSidebar"] [data-testid="stSlider"] p {
 }
 section[data-testid="stSidebar"] [role="radiogroup"] {
     display: flex;
-    flex-direction: column;
     align-items: stretch;
-    background: rgba(255,255,255,.48);
-    border: 1px solid rgba(22,163,74,.25);
-    border-radius: 14px;
-    padding: .48rem;
+    gap: .34rem;
+    background: rgba(255,255,255,.38);
+    border: 1px solid rgba(22,163,74,.22);
+    border-radius: 8px;
+    padding: .34rem;
 }
 section[data-testid="stSidebar"] [role="radiogroup"] > label {
     display: flex;
@@ -152,10 +162,11 @@ section[data-testid="stSidebar"] [role="radiogroup"] > label {
     min-width: 0 !important;
     max-width: none !important;
     box-sizing: border-box;
-    height: 66px;
-    border-radius: 14px;
-    padding: .56rem .72rem;
-    margin: 0 0 .3rem 0;
+    min-height: 38px;
+    height: auto;
+    border-radius: 7px;
+    padding: .42rem .54rem;
+    margin: 0;
     color: #123B2B !important;
     background: rgba(255,255,255,.58);
     border: 1px solid rgba(22,163,74,.15);
@@ -166,7 +177,7 @@ section[data-testid="stSidebar"] [role="radiogroup"] > label:last-child {
 }
 section[data-testid="stSidebar"] [role="radiogroup"] > label span {
     color: #123B2B !important;
-    font-size: .9rem !important;
+    font-size: .78rem !important;
     font-weight: 760 !important;
 }
 section[data-testid="stSidebar"] [role="radiogroup"] > label p {
@@ -202,12 +213,12 @@ section[data-testid="stSidebar"] hr {
     display: flex;
     align-items: center;
     gap: .72rem;
-    padding: .35rem 0 .88rem;
+    padding: .25rem 0 .7rem;
 }
 .brand-mark {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
     display: grid;
     place-items: center;
     font-weight: 900;
@@ -220,7 +231,7 @@ section[data-testid="stSidebar"] hr {
     color: #052E1F !important;
     font-weight: 900;
     line-height: 1.03;
-    font-size: 1.08rem;
+    font-size: .98rem;
 }
 .brand-subtitle {
     color: #166534 !important;
@@ -278,23 +289,16 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
     justify-content: space-between;
     gap: 1rem;
     align-items: stretch;
-    border: 1px solid rgba(200,213,232,.9);
-    background:
-        linear-gradient(135deg, rgba(255,255,255,.99) 0%, rgba(248,250,254,.97) 58%, rgba(236,242,250,.99) 100%);
-    border-radius: 18px;
-    padding: 1rem 1.08rem;
-    box-shadow: var(--shadow-soft);
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+    padding: .35rem .08rem .28rem .08rem;
+    box-shadow: none;
     overflow: hidden;
-    margin-bottom: .82rem;
+    margin-bottom: .52rem;
 }
 .page-hero:before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 6px;
-    background: var(--hero-accent, var(--red));
+    display: none;
 }
 .page-eyebrow {
     color: var(--hero-accent, var(--red));
@@ -307,8 +311,8 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
 .page-question {
     color: var(--ink-700);
     font-weight: 760;
-    margin-top: .3rem;
-    font-size: .98rem;
+    margin-top: .16rem;
+    font-size: .86rem;
 }
 .hero-meta {
     display: flex;
@@ -323,17 +327,17 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
     background: #FFFFFF;
     color: var(--ink-700);
     border-radius: 999px;
-    padding: .5rem .7rem;
-    font-size: .78rem;
+    padding: .36rem .62rem;
+    font-size: .72rem;
     font-weight: 850;
-    box-shadow: 0 10px 22px rgba(31,45,77,.06);
+    box-shadow: 0 8px 18px rgba(31,45,77,.05);
 }
 .filter-strip {
     display: flex;
     gap: .45rem;
     flex-wrap: wrap;
     align-items: center;
-    margin: .24rem 0 .78rem;
+    margin: .18rem 0 .5rem;
 }
 .filter-chip {
     display: inline-flex;
@@ -342,8 +346,8 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
     border: 1px solid var(--line);
     background: rgba(255,255,255,.82);
     border-radius: 999px;
-    padding: .42rem .68rem;
-    font-size: .78rem;
+    padding: .32rem .58rem;
+    font-size: .72rem;
     box-shadow: 0 10px 22px rgba(31,45,77,.05);
 }
 .filter-key {
@@ -360,7 +364,7 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
     justify-content: space-between;
     align-items: end;
     gap: 1rem;
-    margin: .86rem 0 .42rem;
+    margin: .32rem 0 .26rem;
 }
 .section-kicker {
     color: #0F8B5F;
@@ -371,18 +375,18 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
 }
 .section-title {
     color: var(--ink-900);
-    font-size: 1rem;
+    font-size: .96rem;
     font-weight: 900;
     margin-top: .04rem;
 }
 .section-subtitle {
     color: var(--ink-500);
-    font-size: .82rem;
+    font-size: .76rem;
     font-weight: 650;
 }
 
 .kpi-card {
-    min-height: 106px;
+    min-height: 92px;
     position: relative;
     display: flex;
     gap: .74rem;
@@ -391,27 +395,27 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
         linear-gradient(140deg, #FFFFFF 0%, #FBFEFC 64%, rgba(246,252,248,.96) 100%);
     border: 1px solid var(--line);
     border-top: 4px solid var(--accent, var(--red));
-    border-radius: 18px;
-    padding: .92rem .95rem;
+    border-radius: 9px;
+    padding: .72rem .72rem;
     box-shadow: var(--shadow-soft);
     overflow: hidden;
 }
 .kpi-card:after {
     content: "";
     position: absolute;
-    right: -32px;
-    bottom: -38px;
-    width: 112px;
-    height: 112px;
-    border: 18px solid var(--accent-soft, rgba(214,59,50,.09));
+    right: -30px;
+    bottom: -42px;
+    width: 96px;
+    height: 96px;
+    border: 15px solid var(--accent-soft, rgba(214,59,50,.09));
     border-radius: 50%;
 }
 .kpi-icon {
     position: relative;
     z-index: 1;
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -425,7 +429,7 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
 }
 .kpi-body { position: relative; z-index: 1; min-width: 0; }
 .kpi-title {
-    font-size: .68rem;
+    font-size: .62rem;
     text-transform: uppercase;
     color: var(--ink-500);
     font-weight: 900;
@@ -435,7 +439,7 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
     text-overflow: ellipsis;
 }
 .kpi-value {
-    font-size: clamp(1.05rem, 1.22vw, 1.55rem);
+    font-size: clamp(.98rem, 1.14vw, 1.38rem);
     color: var(--ink-900);
     font-weight: 950;
     line-height: 1.08;
@@ -444,7 +448,7 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
 }
 .kpi-subtitle {
     color: var(--ink-500);
-    font-size: .78rem;
+    font-size: .7rem;
     font-weight: 750;
     margin-top: .18rem;
 }
@@ -453,16 +457,16 @@ div[data-testid="stPlotlyChart"] {
     background:
         linear-gradient(180deg, #FFFFFF 0%, #FCFDFF 100%);
     border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 10px 10px 8px;
+    border-radius: 9px;
+    padding: 8px 8px 6px;
     box-shadow: var(--shadow-soft);
 }
 .insight-panel {
     border: 1px solid var(--line);
-    border-radius: 18px;
+    border-radius: 9px;
     background:
         linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
-    padding: 1rem;
+    padding: .82rem;
     box-shadow: var(--shadow-soft);
 }
 .insight-title {
@@ -479,7 +483,7 @@ div[data-testid="stPlotlyChart"] {
 .insight-mark {
     width: 28px;
     height: 28px;
-    border-radius: 10px;
+    border-radius: 8px;
     display: grid;
     place-items: center;
     background: rgba(34,197,94,.12);
@@ -491,9 +495,9 @@ div[data-testid="stPlotlyChart"] {
     background: #FFFFFF;
     border: 1px solid #DDE8FA;
     border-left: 4px solid #22C55E;
-    border-radius: 14px;
-    padding: .7rem .78rem .7rem .86rem;
-    margin: .42rem 0;
+    border-radius: 8px;
+    padding: .62rem .7rem .62rem .78rem;
+    margin: .34rem 0;
     color: #26365E;
     font-weight: 720;
     line-height: 1.36;

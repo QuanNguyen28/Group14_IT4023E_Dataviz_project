@@ -18,42 +18,19 @@ def render_html(markup: str) -> None:
 
 
 def page_header(title: str, question: str, accent: str = "#D94C45", mode: str = "Analytical Report") -> None:
-    """Render a compact executive dashboard header."""
-    render_html(
-        '<div class="page-hero" style="--hero-accent:{accent};">'
-        '<div><div class="page-eyebrow">Global CO2 Dashboard</div>'
-        "<h1>{title}</h1>"
-        '<div class="page-question">{question}</div></div>'
-        '<div class="hero-meta">'
-        '<div class="hero-pill">{mode}</div>'
-        '<div class="hero-pill">OWID CO2 Dataset</div>'
-        "</div></div>".format(
-            accent=escape(accent),
-            title=escape(title),
-            question=escape(question),
-            mode=escape(mode),
-        )
-    )
+    """Header intentionally hidden to keep the dashboard dense."""
+    return None
 
 
 def filter_summary(items: list[tuple[str, str | int | float]]) -> None:
-    chips = []
-    for key, value in items:
-        chips.append(
-            '<span class="filter-chip">'
-            f'<span class="filter-key">{escape(str(key))}</span>'
-            f'<span class="filter-value">{escape(str(value))}</span>'
-            "</span>"
-        )
-    render_html(f'<div class="filter-strip">{"".join(chips)}</div>')
+    """Filter chips are hidden because the sidebar already shows active controls."""
+    return None
 
 
 def section_header(title: str, subtitle: str = "", kicker: str = "Visual") -> None:
     render_html(
         '<div class="section-heading"><div>'
-        f'<div class="section-kicker">{escape(kicker)}</div>'
         f'<div class="section-title">{escape(title)}</div>'
-        f'<div class="section-subtitle">{escape(subtitle)}</div>'
         "</div></div>"
     )
 

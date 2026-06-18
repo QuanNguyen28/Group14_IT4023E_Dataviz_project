@@ -12,9 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from src.analysis.rankings import compute_cumulative_responsibility
-from src.analysis.trends import generate_page_2_insights
 from src.visualization.charts import create_annotated_global_line, create_cumulative_responsibility_bar, create_regional_small_multiples
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header, single_insight
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header, single_insight
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -59,7 +58,7 @@ def render_historical_evolution(country_df, aggregate_df, global_yearly, regiona
     responsibility = compute_cumulative_responsibility(country_part, end, 10)
     with left:
         st.plotly_chart(create_cumulative_responsibility_bar(responsibility), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Cumulative totals highlight long-run responsibility across countries.")
     with right:
         st.plotly_chart(create_regional_small_multiples(regional_part, metric), width="stretch", config=PLOTLY_CONFIG)
-
-    insight_list(generate_page_2_insights(global_part, responsibility, regional_part), "Historical Insights")
+        single_insight("Regional trajectories show where emissions have plateaued or kept rising.")
