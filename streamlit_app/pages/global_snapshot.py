@@ -13,11 +13,10 @@ import streamlit as st
 
 from src.analysis.metrics import compute_global_kpis
 from src.analysis.rankings import compute_regional_totals, get_top_emitters
-from src.analysis.trends import generate_page_1_insights
 from src.visualization.charts import create_top_emitters_bar, create_treemap
 from src.visualization.maps import create_choropleth_map
 from streamlit_app.components.kpi_cards import render_kpis
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header, single_insight
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -89,7 +88,6 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         if map_country and map_country in countries and map_country != st.session_state.page1_country_select:
             st.session_state.page1_pending_country = map_country
             st.rerun()
-        single_insight("Use the map to compare country-level distribution across the selected metric.")
     with right:
         tree_event = st.plotly_chart(
             create_treemap(filtered, compute_regional_totals(aggregate_df, year), year, metric, selected_country),
@@ -103,14 +101,7 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         if tree_country and tree_country in countries and tree_country != st.session_state.page1_country_select:
             st.session_state.page1_pending_country = tree_country
             st.rerun()
-        single_insight("Treemap size follows the selected metric, so per-capita view no longer shows total CO2 blocks.")
 
     top = get_top_emitters(filtered, year, metric, 10)
-    regional = compute_regional_totals(aggregate_df, year)
-    section_header("Country Ranking and Executive Interpretation", "Sorted bars preserve precise comparison; insights summarize what changed attention should focus on.", "Ranking")
-    bottom_left, bottom_right = st.columns([1.45, 1])
-    with bottom_left:
-        st.plotly_chart(create_top_emitters_bar(top, metric, f"Top 10 Countries by {metric_label}"), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("The top emitters concentrate a large share of global CO2 emissions.")
-    with bottom_right:
-        insight_list(generate_page_1_insights(kpis, top, regional, selected_country))
+    section_header("Country Ranking", "Sorted bars preserve precise comparison.", "Ranking")
+    st.plotly_chart(create_top_emitters_bar(top, metric, f"Top 10 Countries by {metric_label}"), width="stretch", config=PLOTLY_CONFIG)

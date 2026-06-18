@@ -141,10 +141,10 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
     )
     )
     fig.update_layout(title=title)
-    return apply_common_layout(fig, 392)
+    return apply_common_layout(fig, 420)
 
 
-def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = "Top Countries"):
+def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = "Top Countries", height: int = 390):
     # Power BI equivalent: sorted clustered bar chart with data labels.
     if df.empty or metric not in df.columns:
         return _empty(title)
@@ -172,7 +172,7 @@ def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = 
         ))
     fig.update_layout(title=title, xaxis_title=unit, yaxis_title="", bargap=0.34, showlegend=True)
     fig.update_yaxes(categoryorder="array", categoryarray=work["country"].tolist())
-    return _with_chart_margins(apply_common_layout(fig, 390), l=142, r=86, t=58, b=84)
+    return _with_chart_margins(apply_common_layout(fig, height), l=142, r=86, t=58, b=84)
 
 
 def create_annotated_global_line(df: pd.DataFrame, metric: str = "co2"):
@@ -221,7 +221,7 @@ def create_annotated_global_line(df: pd.DataFrame, metric: str = "co2"):
 
 
 def create_cumulative_responsibility_bar(df: pd.DataFrame):
-    return create_top_emitters_bar(df, "cumulative_co2", "Top Countries by Cumulative CO2")
+    return create_top_emitters_bar(df, "cumulative_co2", "Top Countries by Cumulative CO2", height=430)
 
 
 def create_regional_small_multiples(df: pd.DataFrame, metric: str = "co2"):
@@ -286,7 +286,7 @@ def create_regional_line(df: pd.DataFrame, metric: str = "co2"):
     )
     fig.update_traces(line=dict(width=3), hovertemplate="<b>%{fullData.name}</b><br>%{x}: %{y:.2f}<extra></extra>")
     fig.update_layout(hovermode="x unified", legend_title_text="Region")
-    return _with_chart_margins(apply_common_layout(fig, 470), l=58, r=26, t=78, b=92)
+    return _with_chart_margins(apply_common_layout(fig, 430), l=58, r=26, t=78, b=92)
 
 
 def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita"):
@@ -434,7 +434,7 @@ def _trend_bar(df: pd.DataFrame, title: str, color: str):
         bargap=0.42,
         showlegend=False,
     )
-    fig = apply_common_layout(fig, 390)
+    fig = apply_common_layout(fig, 520)
     fig.update_layout(
         title=dict(text=title, font=dict(size=15, color=NAVY), x=0.02, y=0.97),
         xaxis_title=dict(text="CAGR magnitude", font=dict(size=11)),
@@ -508,5 +508,5 @@ def create_fuel_share_change_table_or_panel(change_df: pd.DataFrame):
             change_df["change_pp"].map(lambda v: f"{v:+.0f} pp"),
         ], align="left", height=32, fill_color=row_fills, line_color="#D8E2EE", font=dict(color=[NAVY, NAVY, NAVY, colors], size=12)),
     )])
-    fig.update_layout(title="Fuel Share Change", height=320, margin=dict(l=8, r=8, t=56, b=8), paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(title="Fuel Share Change", height=440, margin=dict(l=8, r=8, t=56, b=8), paper_bgcolor="rgba(0,0,0,0)")
     return fig

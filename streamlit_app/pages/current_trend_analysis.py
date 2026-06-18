@@ -12,14 +12,14 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from src.analysis.trends import (
-    compute_country_trends, compute_fuel_share_change, generate_page_3_insights,
+    compute_country_trends, compute_fuel_share_change,
     get_fastest_declining, get_fastest_increasing,
 )
 from src.visualization.charts import (
     create_bubble_scatter, create_fastest_declining_bar, create_fastest_increasing_bar,
     create_fuel_decomposition_area, create_fuel_share_change_table_or_panel,
 )
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insight_list, page_header, section_header, single_insight
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -67,22 +67,17 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         ("Fuel region", selected_fuel_region),
     ])
     section_header("Growth, Emissions Profile, and Momentum Rankings", "Bubble size encodes current scale; the two rankings isolate fastest movers.", "Signal Scan")
-    top_left, top_mid, top_right = st.columns([1.48, .9, .9])
+    top_left, top_mid, top_right = st.columns([1.55, .88, .88])
     with top_left:
         st.plotly_chart(create_bubble_scatter(trends, y_metric), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("CO2 CAGR is fixed to 2022-2024; Y-axis is latest available GDP per capita in that window; bubble size is 2024 total CO2.")
     with top_mid:
         st.plotly_chart(create_fastest_increasing_bar(increasing), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Emerging fast movers may shape future emissions.")
     with top_right:
         st.plotly_chart(create_fastest_declining_bar(declining), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Declining countries show where reductions are already visible.")
 
     section_header("Fuel Mix Decomposition", "A 100 percent stacked area chart shows how the selected region's emissions sources are changing.", "Decomposition")
-    bottom_left, bottom_right = st.columns([1.65, .75])
+    bottom_left, bottom_right = st.columns([1.55, .85])
     with bottom_left:
         st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_fuel_region), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Fuel mix shares aggregate all countries in the selected region.")
     with bottom_right:
         st.plotly_chart(create_fuel_share_change_table_or_panel(fuel_change), width="stretch", config=PLOTLY_CONFIG)
-        insight_list(generate_page_3_insights(increasing, declining, fuel_change, selected_fuel_region), "Trend Insights")

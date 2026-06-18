@@ -13,7 +13,7 @@ import streamlit as st
 
 from src.analysis.rankings import compute_cumulative_responsibility
 from src.visualization.charts import create_annotated_global_line, create_cumulative_responsibility_bar, create_regional_line
-from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header, single_insight
+from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header
 from streamlit_app.components.sidebar import common_filter_values
 
 
@@ -46,14 +46,11 @@ def render_historical_evolution(country_df, aggregate_df, global_yearly, regiona
     ])
     section_header("Annotated Global Trajectory", "Major historical events are pinned to the time series to reduce change blindness.", "Storyline")
     st.plotly_chart(create_annotated_global_line(global_part, metric), width="stretch", config=PLOTLY_CONFIG)
-    single_insight("Global CO2 emissions remained low for centuries, then accelerated rapidly after industrialization.")
 
     section_header("Historical Responsibility and Regional Evolution", "Cumulative bars answer responsibility; small multiples keep regional trajectories readable.", "Comparison")
-    left, right = st.columns([1.14, 1.28])
+    left, right = st.columns([1, 1.25])
     responsibility = compute_cumulative_responsibility(country_part, end, 10)
     with left:
         st.plotly_chart(create_cumulative_responsibility_bar(responsibility), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Cumulative totals highlight long-run responsibility across countries.")
     with right:
         st.plotly_chart(create_regional_line(regional_part, metric), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("A single regional line chart makes the cross-region comparison easier during presentation.")
