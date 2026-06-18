@@ -3,6 +3,7 @@ pandas
 numpy
 plotly
 pycountry
+country_converter
 scikit-learn
 matplotlib
 altair

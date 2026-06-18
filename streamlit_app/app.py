@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.build_datasets import build_all
+from src.data.clean_data import enrich_missing_regions
 from src.data.load_data import load_csv_if_exists
 from src.utils.constants import AGGREGATES_PATH, COUNTRY_YEAR_PATH, FUEL_LONG_PATH, GLOBAL_YEARLY_PATH, REGIONAL_YEARLY_PATH
 from streamlit_app.components.sidebar import render_navigation
@@ -35,7 +36,7 @@ def load_dashboard_data():
     if any(x is None for x in [country, aggregates, fuel, global_yearly, regional_yearly]):
         built = build_all()
         return built["countries"], built["aggregates"], built["fuel_long"], built["global_yearly"], built["regional_yearly"]
-    return country, aggregates, fuel, global_yearly, regional_yearly
+    return enrich_missing_regions(country), aggregates, enrich_missing_regions(fuel), global_yearly, regional_yearly
 
 
 try:

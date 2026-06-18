@@ -21,6 +21,19 @@ def compute_country_trends(df: pd.DataFrame, start_year: int, end_year: int) -> 
     end_cols = [c for c in ["country", "iso_code", "region", "income_group", "year", "co2", "co2_per_capita", "population", "cumulative_co2"] if c in df.columns]
     end = df.loc[df["year"].eq(end_year), end_cols].rename(columns={"co2": "co2_end"})
     out = end.merge(start, on="country", how="left")
+    if {"gdp", "population"}.issubset(df.columns):
+        economic = (
+            df.loc[df["year"].between(start_year, end_year), ["country", "year", "gdp", "population"]]
+            .dropna(subset=["gdp", "population"])
+            .loc[lambda d: (d["gdp"] > 0) & (d["population"] > 0)]
+            .sort_values(["country", "year"])
+            .groupby("country", as_index=False)
+            .tail(1)
+            .rename(columns={"year": "gdp_year", "gdp": "latest_gdp", "population": "gdp_population"})
+        )
+        if not economic.empty:
+            economic["gdp_per_capita"] = economic["latest_gdp"] / economic["gdp_population"]
+            out = out.merge(economic[["country", "gdp_year", "latest_gdp", "gdp_per_capita"]], on="country", how="left")
     years = end_year - start_year
     out["co2_change"] = out["co2_end"] - out["co2_start"]
     out["co2_cagr"] = out.apply(lambda r: compute_cagr(r["co2_start"], r["co2_end"], years), axis=1)
@@ -36,18 +49,21 @@ def get_fastest_declining(trends: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     return trends.dropna(subset=["co2_cagr"]).loc[lambda d: d["co2_cagr"] < 0].nsmallest(n, "co2_cagr")
 
 
-def compute_fuel_shares(fuel_long: pd.DataFrame, country: str) -> pd.DataFrame:
-    df = fuel_long.loc[fuel_long["country"].eq(country)].copy()
+def compute_fuel_shares(fuel_long: pd.DataFrame, region: str) -> pd.DataFrame:
+    if "region" not in fuel_long.columns:
+        return pd.DataFrame()
+    df = fuel_long.loc[fuel_long["region"].eq(region)].copy()
     if df.empty:
         return df
     df["value_for_share"] = df["value"].clip(lower=0)
+    df = df.groupby(["year", "fuel_source"], as_index=False)["value_for_share"].sum()
     totals = df.groupby("year")["value_for_share"].transform("sum")
     df["share"] = np.where(totals > 0, df["value_for_share"] / totals * 100, np.nan)
     return df
 
 
-def compute_fuel_share_change(fuel_long: pd.DataFrame, country: str) -> pd.DataFrame:
-    shares = compute_fuel_shares(fuel_long, country)
+def compute_fuel_share_change(fuel_long: pd.DataFrame, region: str) -> pd.DataFrame:
+    shares = compute_fuel_shares(fuel_long, region)
     if shares.empty:
         return pd.DataFrame(columns=["fuel_source", "start_share", "end_share", "change_pp"])
     years = sorted(shares.loc[shares["share"].notna(), "year"].unique())
@@ -91,7 +107,7 @@ def generate_page_2_insights(global_yearly: pd.DataFrame, responsibility: pd.Dat
     return insights
 
 
-def generate_page_3_insights(increasing: pd.DataFrame, declining: pd.DataFrame, fuel_change: pd.DataFrame, selected_country: str) -> list[str]:
+def generate_page_3_insights(increasing: pd.DataFrame, declining: pd.DataFrame, fuel_change: pd.DataFrame, selected_region: str) -> list[str]:
     insights = []
     if not increasing.empty:
         insights.append(f"{increasing.iloc[0]['country']} has the fastest positive CO2 growth in the selected window.")
@@ -99,7 +115,6 @@ def generate_page_3_insights(increasing: pd.DataFrame, declining: pd.DataFrame, 
         insights.append(f"{declining.iloc[0]['country']} has the fastest decline in the selected window.")
     if not fuel_change.empty:
         biggest = fuel_change.reindex(fuel_change["change_pp"].abs().sort_values(ascending=False).index).iloc[0]
-        insights.append(f"In {selected_country}, {biggest['fuel_source']} changed the most in the fuel mix.")
+        insights.append(f"In {selected_region}, {biggest['fuel_source']} changed the most in the regional fuel mix.")
     insights.append("Top-right scatter countries combine high emissions with high growth and deserve priority attention.")
     return insights
-

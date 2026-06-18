@@ -23,47 +23,37 @@ from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insig
 from streamlit_app.components.sidebar import common_filter_values
 
 
-def _fuel_country_options(countries, fuel_long):
-    country_set = {country for country in countries if country != "World"}
-    if fuel_long.empty or "country" not in fuel_long or "value" not in fuel_long:
-        options = sorted(country_set) or list(countries)
+def _fuel_region_options(regions, fuel_long):
+    region_set = {region for region in regions if region != "All"}
+    if fuel_long.empty or "region" not in fuel_long or "value" not in fuel_long:
+        options = sorted(region_set)
     else:
-        with_data = fuel_long.loc[fuel_long["value"].fillna(0).gt(0), "country"].dropna().unique()
-        options = sorted(country_set.intersection(with_data))
-        if not options:
-            options = sorted(country_set) or list(countries)
-    preferred = ["China", "United States", "India", "Russia", "Japan", "Germany"]
-    default = next((country for country in preferred if country in options), options[0])
+        with_data = fuel_long.loc[fuel_long["value"].fillna(0).gt(0), "region"].dropna().unique()
+        options = sorted(region_set.intersection(with_data))
+    if not options:
+        options = sorted(region_set) or ["Asia"]
+    default = "Asia" if "Asia" in options else options[0]
     return options, options.index(default)
 
 
 def render_current_trend_analysis(country_df, fuel_long) -> None:
     page_header("CURRENT TREND ANALYSIS", "Who is changing fastest today?", "#D94C45", "Momentum scanner")
-    years, regions, incomes, countries = common_filter_values(country_df)
+    years, regions, incomes, _ = common_filter_values(country_df)
     latest = max(years)
     earliest = min(years)
-    default_start = max(min(years), latest - 5)
-    fuel_options, fuel_default_index = _fuel_country_options(countries, fuel_long)
+    base_year, end_year = 2022, 2024
+    fuel_options, fuel_default_index = _fuel_region_options(regions, fuel_long)
     with st.sidebar:
         st.markdown("### Filters")
-        if earliest >= latest:
-            st.warning("At least two years are required for trend analysis.")
+        if earliest > base_year or latest < end_year:
+            st.warning("The 2022-2024 trend window is not available in this dataset.")
             return
-        base_year, end_year = st.slider(
-            "Compare Years",
-            min_value=earliest,
-            max_value=latest,
-            value=(default_start, latest),
-        )
-        if base_year >= end_year:
-            st.warning("Move the right handle after the left handle to compare trends.")
-            return
-        _ = st.selectbox("Time Window", ["Selected Years", "5-Year (CAGR)"], index=1)
+        st.caption("Quadrant window is fixed to 2022-2024.")
         region = st.selectbox("Region", regions)
         income = st.selectbox("Income Group", incomes)
-        y_label = st.radio("Metric (Y-Axis)", ["CO2 Per Capita", "Total CO2"], horizontal=True)
-        selected_country = st.selectbox("Fuel Country", fuel_options, index=fuel_default_index)
-    y_metric = "co2_per_capita" if y_label == "CO2 Per Capita" else "co2"
+        selected_fuel_region = st.selectbox("Fuel Region", fuel_options, index=fuel_default_index)
+    y_label = "GDP Per Capita"
+    y_metric = "gdp_per_capita"
 
     trends = compute_country_trends(country_df, base_year, end_year)
     if region != "All" and "region" in trends:
@@ -72,20 +62,20 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         trends = trends[trends["income_group"].eq(income)]
     increasing = get_fastest_increasing(trends, 10)
     declining = get_fastest_declining(trends, 10)
-    fuel_change = compute_fuel_share_change(fuel_long, selected_country)
+    fuel_change = compute_fuel_share_change(fuel_long, selected_fuel_region)
 
     filter_summary([
         ("Window", f"{base_year}-{end_year}"),
         ("Y-axis", y_label),
         ("Region", region),
         ("Income", income),
-        ("Fuel country", selected_country),
+        ("Fuel region", selected_fuel_region),
     ])
     section_header("Growth, Emissions Profile, and Momentum Rankings", "Bubble size encodes current scale; the two rankings isolate fastest movers.", "Signal Scan")
-    top_left, top_mid, top_right = st.columns([1.55, .78, .78])
+    top_left, top_mid, top_right = st.columns([1.48, .9, .9])
     with top_left:
         st.plotly_chart(create_bubble_scatter(trends, y_metric), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Top-right countries combine high emissions with fast growth and need priority attention.")
+        single_insight("CO2 CAGR is fixed to 2022-2024; Y-axis is latest available GDP per capita in that window; bubble size is 2024 total CO2.")
     with top_mid:
         st.plotly_chart(create_fastest_increasing_bar(increasing), width="stretch", config=PLOTLY_CONFIG)
         single_insight("Emerging fast movers may shape future emissions.")
@@ -93,11 +83,11 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         st.plotly_chart(create_fastest_declining_bar(declining), width="stretch", config=PLOTLY_CONFIG)
         single_insight("Declining countries show where reductions are already visible.")
 
-    section_header("Fuel Mix Decomposition", "A 100 percent stacked area chart shows how the selected country's emissions sources are changing.", "Decomposition")
+    section_header("Fuel Mix Decomposition", "A 100 percent stacked area chart shows how the selected region's emissions sources are changing.", "Decomposition")
     bottom_left, bottom_right = st.columns([1.65, .75])
     with bottom_left:
-        st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_country), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Fuel mix shares reveal which sources are driving the selected country.")
+        st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_fuel_region), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("Fuel mix shares aggregate all countries in the selected region.")
     with bottom_right:
         st.plotly_chart(create_fuel_share_change_table_or_panel(fuel_change), width="stretch", config=PLOTLY_CONFIG)
-        insight_list(generate_page_3_insights(increasing, declining, fuel_change, selected_country), "Trend Insights")
+        insight_list(generate_page_3_insights(increasing, declining, fuel_change, selected_fuel_region), "Trend Insights")

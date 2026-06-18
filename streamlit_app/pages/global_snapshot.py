@@ -21,46 +21,56 @@ from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, insig
 from streamlit_app.components.sidebar import common_filter_values
 
 
-def _filter(df, region, income):
+def _filter(df, region):
     out = df.copy()
     if region != "All" and "region" in out:
         out = out[out["region"].eq(region)]
-    if income != "All" and "income_group" in out:
-        out = out[out["income_group"].eq(income)]
     return out
+
+
+def _selected_country_from_event(event) -> str | None:
+    if not event:
+        return None
+    points = event.get("selection", {}).get("points", []) if isinstance(event, dict) else event.selection.points
+    if not points:
+        return None
+    point = points[0]
+    customdata = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
+    if customdata is not None and len(customdata) > 0:
+        country = customdata[0]
+        return country if country != "World" else None
+    label = point.get("label") if isinstance(point, dict) else getattr(point, "label", None)
+    return label if label and label != "World" else None
 
 
 def render_global_snapshot(country_df, aggregate_df) -> None:
     page_header("GLOBAL SNAPSHOT", "What does the world look like today?", "#D94C45", "Current-state overview")
-    years, regions, incomes, countries = common_filter_values(country_df)
-    min_year, max_year = min(years), max(years)
-    default_start = max(min_year, max_year - 5)
+    years, regions, _, countries = common_filter_values(country_df)
+    year = max(years)
+    if "page1_country_select" not in st.session_state:
+        st.session_state.page1_country_select = "World"
+    pending_country = st.session_state.pop("page1_pending_country", None)
+    if pending_country in countries:
+        st.session_state.page1_country_select = pending_country
     with st.sidebar:
         st.markdown("### Filters")
-        if min_year < max_year:
-            year_start, year = st.slider(
-                "Year Range",
-                min_value=min_year,
-                max_value=max_year,
-                value=(default_start, max_year),
-            )
-        else:
-            year_start = year = max_year
-            st.info(f"Only {year} is available.")
+        st.caption(f"Snapshot uses latest available year: {year}.")
         metric_label = st.radio("Metric", ["Total CO2", "CO2 Per Capita"], horizontal=True)
         region = st.selectbox("Region", regions)
-        income = st.selectbox("Income Group", incomes)
-        selected_country = st.selectbox("Selected Country", countries)
+        selected_country = st.selectbox(
+            "Selected Country",
+            countries,
+            key="page1_country_select",
+        )
     metric = "co2" if metric_label == "Total CO2" else "co2_per_capita"
-    filtered = _filter(country_df, region, income)
+    filtered = _filter(country_df, region)
+    selected_country = st.session_state.page1_country_select
 
     kpis = compute_global_kpis(country_df, aggregate_df, year, selected_country)
     filter_summary([
-        ("Year Range", f"{year_start}-{year}"),
         ("Selected Year", year),
         ("Metric", metric_label),
         ("Region", region),
-        ("Income", income),
         ("Drill-down", selected_country),
     ])
     render_kpis(kpis)
@@ -68,11 +78,33 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
 
     left, right = st.columns([1.25, 1])
     with left:
-        st.plotly_chart(create_choropleth_map(filtered, year, metric), width="stretch", config=PLOTLY_CONFIG)
+        map_event = st.plotly_chart(
+            create_choropleth_map(filtered, year, metric, selected_country),
+            width="stretch",
+            config=PLOTLY_CONFIG,
+            key="page1_region_map",
+            on_select="rerun",
+            selection_mode="points",
+        )
+        map_country = _selected_country_from_event(map_event)
+        if map_country and map_country in countries and map_country != st.session_state.page1_country_select:
+            st.session_state.page1_pending_country = map_country
+            st.rerun()
         single_insight("Use the map to compare country-level distribution across the selected metric.")
     with right:
-        st.plotly_chart(create_treemap(filtered, compute_regional_totals(aggregate_df, year), year), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Regional blocks show which parts of the world dominate the selected year.")
+        tree_event = st.plotly_chart(
+            create_treemap(filtered, compute_regional_totals(aggregate_df, year), year, metric, selected_country),
+            width="stretch",
+            config=PLOTLY_CONFIG,
+            key="page1_region_treemap",
+            on_select="rerun",
+            selection_mode="points",
+        )
+        tree_country = _selected_country_from_event(tree_event)
+        if tree_country and tree_country in countries and tree_country != st.session_state.page1_country_select:
+            st.session_state.page1_pending_country = tree_country
+            st.rerun()
+        single_insight("Treemap size follows the selected metric, so per-capita view no longer shows total CO2 blocks.")
 
     top = get_top_emitters(filtered, year, metric, 10)
     regional = compute_regional_totals(aggregate_df, year)

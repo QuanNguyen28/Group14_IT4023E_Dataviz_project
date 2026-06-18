@@ -41,7 +41,7 @@ def render_navigation() -> str:
 
 def common_filter_values(country_df):
     years = sorted(country_df["year"].dropna().astype(int).unique().tolist()) if not country_df.empty else [2024]
-    regions = ["All"] + sorted(country_df["region"].dropna().unique().tolist()) if "region" in country_df else ["All"]
-    incomes = ["All"] + sorted(country_df["income_group"].dropna().unique().tolist()) if "income_group" in country_df else ["All"]
+    regions = ["All"] + sorted(country_df.loc[~country_df["region"].eq("Unknown"), "region"].dropna().unique().tolist()) if "region" in country_df else ["All"]
+    incomes = ["All"] + sorted(country_df.loc[~country_df["income_group"].eq("Unknown"), "income_group"].dropna().unique().tolist()) if "income_group" in country_df else ["All"]
     countries = ["World"] + sorted(country_df["country"].dropna().unique().tolist()) if "country" in country_df else ["World"]
     return years, regions, incomes, countries

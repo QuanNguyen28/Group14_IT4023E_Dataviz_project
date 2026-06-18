@@ -6,6 +6,10 @@ import re
 
 import numpy as np
 import pandas as pd
+try:
+    import country_converter as coco
+except ImportError:  # pragma: no cover - optional at runtime, listed in requirements for app use.
+    coco = None
 
 from src.utils.constants import METRIC_COLUMNS, NON_COUNTRY_AGGREGATES, NON_NEGATIVE_METRICS, REGIONS
 
@@ -60,6 +64,27 @@ def infer_region(row: pd.Series) -> str:
     return "Unknown"
 
 
+def enrich_missing_regions(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill missing country regions from ISO3 metadata when available."""
+    if coco is None or df.empty or "region" not in df.columns or "iso_code" not in df.columns:
+        return df
+    out = df.copy()
+    iso = out["iso_code"].astype("string")
+    missing = out["region"].eq("Unknown") & iso.str.len().eq(3) & ~iso.str.startswith("OWID_", na=False)
+    if not missing.any():
+        return out
+    unique_iso = out.loc[missing, "iso_code"].dropna().astype(str).unique().tolist()
+    converted = coco.convert(
+        names=unique_iso,
+        src="ISO3",
+        to="continent_7",
+        not_found="Unknown",
+    )
+    iso_to_region = pd.Series(converted, index=unique_iso).where(lambda s: s.isin(REGIONS), "Unknown").to_dict()
+    out.loc[missing, "region"] = out.loc[missing, "iso_code"].map(iso_to_region).fillna("Unknown")
+    return out
+
+
 def infer_income_group(row: pd.Series) -> str:
     if "income_group" in row and pd.notna(row["income_group"]):
         return str(row["income_group"])
@@ -91,6 +116,7 @@ def clean_co2_data(df: pd.DataFrame) -> pd.DataFrame:
         out["iso_code"] = np.nan
     out["is_aggregate"] = out.apply(is_aggregate_row, axis=1)
     out["region"] = out.apply(infer_region, axis=1)
+    out = enrich_missing_regions(out)
     out["income_group"] = out.apply(infer_income_group, axis=1)
 
     if "gdp" in out.columns and "co2" in out.columns:

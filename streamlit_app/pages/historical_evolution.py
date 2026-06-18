@@ -12,14 +12,14 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from src.analysis.rankings import compute_cumulative_responsibility
-from src.visualization.charts import create_annotated_global_line, create_cumulative_responsibility_bar, create_regional_small_multiples
+from src.visualization.charts import create_annotated_global_line, create_cumulative_responsibility_bar, create_regional_line
 from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header, single_insight
 from streamlit_app.components.sidebar import common_filter_values
 
 
 def render_historical_evolution(country_df, aggregate_df, global_yearly, regional_yearly) -> None:
     page_header("HISTORICAL EVOLUTION", "How did global CO2 emissions evolve over time?", "#D94C45", "Long-run story")
-    years, regions, incomes, _ = common_filter_values(country_df)
+    years, regions, _, _ = common_filter_values(country_df)
     min_year, max_year = min(years), max(years)
     with st.sidebar:
         st.markdown("### Filters")
@@ -28,10 +28,8 @@ def render_historical_evolution(country_df, aggregate_df, global_yearly, regiona
         else:
             time_range = (max_year, max_year)
             st.info(f"Only {max_year} is available.")
-        view_by = st.radio("View By", ["World", "Region", "Income Group"])
         metric_label = st.radio("Metric", ["Total CO2", "CO2 Per Capita"], horizontal=True)
         region = st.selectbox("Region", regions)
-        income = st.selectbox("Income Group", incomes)
     metric = "co2" if metric_label == "Total CO2" else "co2_per_capita"
     start, end = time_range
     global_part = global_yearly[global_yearly["year"].between(start, end)]
@@ -39,26 +37,23 @@ def render_historical_evolution(country_df, aggregate_df, global_yearly, regiona
     country_part = country_df[country_df["year"].between(start, end)]
     if region != "All":
         country_part = country_part[country_part["region"].eq(region)]
-    if income != "All":
-        country_part = country_part[country_part["income_group"].eq(income)]
+        regional_part = regional_part[regional_part["country"].eq(region)]
 
     filter_summary([
         ("Years", f"{start}-{end}"),
-        ("View", view_by),
         ("Metric", metric_label),
         ("Region", region),
-        ("Income", income),
     ])
     section_header("Annotated Global Trajectory", "Major historical events are pinned to the time series to reduce change blindness.", "Storyline")
     st.plotly_chart(create_annotated_global_line(global_part, metric), width="stretch", config=PLOTLY_CONFIG)
     single_insight("Global CO2 emissions remained low for centuries, then accelerated rapidly after industrialization.")
 
     section_header("Historical Responsibility and Regional Evolution", "Cumulative bars answer responsibility; small multiples keep regional trajectories readable.", "Comparison")
-    left, right = st.columns([1, 1.35])
+    left, right = st.columns([1.14, 1.28])
     responsibility = compute_cumulative_responsibility(country_part, end, 10)
     with left:
         st.plotly_chart(create_cumulative_responsibility_bar(responsibility), width="stretch", config=PLOTLY_CONFIG)
         single_insight("Cumulative totals highlight long-run responsibility across countries.")
     with right:
-        st.plotly_chart(create_regional_small_multiples(regional_part, metric), width="stretch", config=PLOTLY_CONFIG)
-        single_insight("Regional trajectories show where emissions have plateaued or kept rising.")
+        st.plotly_chart(create_regional_line(regional_part, metric), width="stretch", config=PLOTLY_CONFIG)
+        single_insight("A single regional line chart makes the cross-region comparison easier during presentation.")
