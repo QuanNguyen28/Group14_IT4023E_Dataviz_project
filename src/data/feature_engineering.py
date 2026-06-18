@@ -1,85 +1,71 @@
-# feature engineering for the smartphone usage dataset
+"""Feature engineering for dashboard-ready CO2 datasets."""
+
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from src.data.clean_data import clean_data
-from src.utils.constants import (
-    CLEAN_DATA_PATH,
-    FEATURE_DATA_PATH,
-    AGE_GROUP_ORDER,
-    SCREEN_SEGMENT_ORDER,
-    APP_CATEGORY_COLS,
-)
-from src.utils.helpers import save_csv, ordered_categorical
-from src.utils.logger import get_logger
-
-logger = get_logger(__name__)
+from src.utils.constants import FUEL_COLUMNS
 
 
-def add_age_group(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    bins = [17, 24, 34, 44, 54, 120]
-    labels = AGE_GROUP_ORDER
-    df["Age_Group"] = pd.cut(df["Age"], bins=bins, labels=labels, include_lowest=True)
-    return df
+def add_world_shares(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "co2" not in out.columns:
+        out["share_of_world_co2"] = np.nan
+        return out
+    world = out.loc[out["country"].eq("World"), ["year", "co2"]].rename(columns={"co2": "world_co2"})
+    out = out.merge(world, on="year", how="left")
+    out["share_of_world_co2"] = np.where(out["world_co2"] > 0, out["co2"] / out["world_co2"] * 100, np.nan)
+    return out.drop(columns=["world_co2"])
 
 
-def add_screen_time_segment(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    bins = [-np.inf, 4, 8, 12, np.inf]
-    labels = SCREEN_SEGMENT_ORDER
-    df["Screen_Time_Segment"] = pd.cut(
-        df["Daily_Screen_Time_Hours"], bins=bins, labels=labels, right=False
+def add_previous_year_values(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.sort_values(["country", "year"]).copy()
+    for col in ["co2", "co2_per_capita", "population"]:
+        if col in out.columns:
+            out[f"previous_{col}"] = out.groupby("country")[col].shift(1)
+    return out
+
+
+def add_cagr_features(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+    out = df.sort_values(["country", "year"]).copy()
+    if "co2" not in out.columns:
+        out[f"co2_cagr_{window}y"] = np.nan
+        out[f"co2_change_{window}y"] = np.nan
+        return out
+    start = out.groupby("country")["co2"].shift(window)
+    out[f"co2_start_{window}y"] = start
+    out[f"co2_change_{window}y"] = out["co2"] - start
+    out[f"co2_cagr_{window}y"] = np.where(
+        (out["co2"] > 0) & (start > 0),
+        (out["co2"] / start) ** (1 / window) - 1,
+        np.nan,
     )
-    return df
+    return out
 
 
-def dominant_lifestyle(row: pd.Series) -> str:
-    values = {
-        "Social Enthusiast": row["Social_Media_Usage_Hours"],
-        "Productivity Focused": row["Productivity_App_Usage_Hours"],
-        "Mobile Gamer": row["Gaming_App_Usage_Hours"],
-    }
-    return max(values, key=values.get)
+def add_cumulative_share(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "cumulative_co2" not in out.columns:
+        out["cumulative_share_of_world"] = np.nan
+        return out
+    world = out.loc[out["country"].eq("World"), ["year", "cumulative_co2"]].rename(
+        columns={"cumulative_co2": "world_cumulative_co2"}
+    )
+    out = out.merge(world, on="year", how="left")
+    out["cumulative_share_of_world"] = np.where(
+        out["world_cumulative_co2"] > 0,
+        out["cumulative_co2"] / out["world_cumulative_co2"] * 100,
+        np.nan,
+    )
+    return out.drop(columns=["world_cumulative_co2"])
 
 
-def build_features(df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Create analysis-ready features for dashboard and Power BI."""
-    if df is None:
-        try:
-            df = pd.read_csv(CLEAN_DATA_PATH)
-        except FileNotFoundError:
-            df = clean_data()
-    else:
-        df = df.copy()
-
-    df = add_age_group(df)
-    df = add_screen_time_segment(df)
-    df["Dominant_Lifestyle"] = df.apply(dominant_lifestyle, axis=1)
-
-    df["Category_Usage_Sum"] = df[APP_CATEGORY_COLS].sum(axis=1)
-    df["Entertainment_Hours"] = df["Social_Media_Usage_Hours"] + df["Gaming_App_Usage_Hours"]
-    df["Screen_to_App_Gap"] = df["Daily_Screen_Time_Hours"] - df["Total_App_Usage_Hours"]
-    df["App_Fragmentation_Score"] = df["Total_App_Usage_Hours"] / df["Number_of_Apps_Used"].replace(0, np.nan)
-    df["Category_vs_Total_Diff"] = df["Category_Usage_Sum"] - df["Total_App_Usage_Hours"]
-
-    # Ratios are useful for pattern discovery, but should not be interpreted as exact parts of total if source data is inconsistent.
-    df["Social_Ratio"] = df["Social_Media_Usage_Hours"] / df["Category_Usage_Sum"].replace(0, np.nan)
-    df["Productivity_Ratio"] = df["Productivity_App_Usage_Hours"] / df["Category_Usage_Sum"].replace(0, np.nan)
-    df["Gaming_Ratio"] = df["Gaming_App_Usage_Hours"] / df["Category_Usage_Sum"].replace(0, np.nan)
-
-    df["Age_Group"] = ordered_categorical(df["Age_Group"].astype(str), AGE_GROUP_ORDER)
-    df["Screen_Time_Segment"] = ordered_categorical(df["Screen_Time_Segment"].astype(str), SCREEN_SEGMENT_ORDER)
-    return df
-
-
-def main() -> None:
-    df = build_features()
-    path = save_csv(df, FEATURE_DATA_PATH)
-    logger.info("Feature data saved to %s with shape %s", path, df.shape)
-
-
-if __name__ == "__main__":
-    main()
+def build_fuel_long(country_year: pd.DataFrame) -> pd.DataFrame:
+    id_cols = [col for col in ["country", "iso_code", "year", "region", "income_group"] if col in country_year.columns]
+    value_cols = [col for col in FUEL_COLUMNS if col in country_year.columns]
+    if not value_cols:
+        return pd.DataFrame(columns=id_cols + ["fuel_source", "value"])
+    long = country_year.melt(id_vars=id_cols, value_vars=value_cols, var_name="fuel_column", value_name="value")
+    long["fuel_source"] = long["fuel_column"].map(FUEL_COLUMNS)
+    return long.drop(columns=["fuel_column"])

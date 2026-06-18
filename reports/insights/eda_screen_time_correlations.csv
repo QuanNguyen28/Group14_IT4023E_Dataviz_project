@@ -1,9 +1,0 @@
-Variable,Correlation_with_Screen_Time
-Social_Media_Usage_Hours,0.03
-Productivity_App_Usage_Hours,0.03
-App_Fragmentation_Score,-0.03
-Age,-0.02
-Number_of_Apps_Used,0.02
-Gaming_App_Usage_Hours,-0.01
-Entertainment_Hours,0.01
-Total_App_Usage_Hours,0.0

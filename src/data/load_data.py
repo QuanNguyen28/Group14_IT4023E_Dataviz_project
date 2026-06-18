@@ -1,28 +1,22 @@
-from __future__ import annotations
+"""Raw and processed data loading utilities."""
 
-from pathlib import Path
+from __future__ import annotations
 
 import pandas as pd
 
-from src.utils.constants import RAW_DATA_PATH, FEATURE_DATA_PATH, CLUSTERED_DATA_PATH
+from src.utils.constants import RAW_CO2_PATH
 
 
-def load_raw_data(path: str | Path = RAW_DATA_PATH) -> pd.DataFrame:
-    path = Path(path)
+def load_raw_co2(path=RAW_CO2_PATH) -> pd.DataFrame:
+    """Load the OWID CO2 CSV with a clear error if it is missing."""
     if not path.exists():
-        raise FileNotFoundError(f"Raw dataset not found: {path}")
+        raise FileNotFoundError(
+            f"Raw OWID CO2 file not found at {path}. "
+            "Download owid-co2-data.csv and place it in data/raw/."
+        )
     return pd.read_csv(path)
 
 
-def load_feature_data(path: str | Path = FEATURE_DATA_PATH) -> pd.DataFrame:
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Feature dataset not found: {path}")
-    return pd.read_csv(path)
+def load_csv_if_exists(path) -> pd.DataFrame | None:
+    return pd.read_csv(path) if path.exists() else None
 
-
-def load_clustered_data(path: str | Path = CLUSTERED_DATA_PATH) -> pd.DataFrame:
-    path = Path(path)
-    if path.exists():
-        return pd.read_csv(path)
-    return load_feature_data()
