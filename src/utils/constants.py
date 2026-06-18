@@ -48,19 +48,19 @@ METRIC_LABELS = {"co2": "Total CO2", "co2_per_capita": "CO2 Per Capita"}
 METRIC_UNITS = {"co2": "Mt CO2", "co2_per_capita": "t / person", "cumulative_co2": "Mt CO2"}
 
 REGION_COLORS = {
-    "Asia": "#D94C45",
-    "Europe": "#2563EB",
-    "North America": "#2F855A",
-    "South America": "#F59E0B",
-    "Africa": "#7C3AED",
-    "Oceania": "#0891B2",
+    "Asia": "#D55E00",
+    "Europe": "#0072B2",
+    "North America": "#009E73",
+    "South America": "#E69F00",
+    "Africa": "#CC79A7",
+    "Oceania": "#56B4E9",
     "Unknown": "#8A94A6",
 }
 FUEL_COLORS = {
-    "Coal": "#1D2736",
-    "Oil": "#D93A32",
-    "Gas": "#3367D6",
-    "Cement": "#7E4DBA",
-    "Land-use Change": "#43A047",
-    "Flaring": "#F28E2B",
+    "Coal": "#000000",
+    "Oil": "#D55E00",
+    "Gas": "#0072B2",
+    "Cement": "#CC79A7",
+    "Land-use Change": "#009E73",
+    "Flaring": "#F0E442",
 }

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 try:
     import country_converter as coco
-except ImportError:  # pragma: no cover - optional at runtime, listed in requirements for app use.
+except ImportError:  
     coco = None
 
 from src.utils.constants import METRIC_COLUMNS, NON_COUNTRY_AGGREGATES, NON_NEGATIVE_METRICS, REGIONS
@@ -53,7 +53,7 @@ COUNTRY_REGION_OVERRIDES = {
     "Palestine": "Asia",
     "Philippines": "Asia",
     "Qatar": "Asia",
-    "Russia": "Asia",          # geographically transcontinental; placed in Asia per OWID convention
+    "Russia": "Asia",          
     "Saudi Arabia": "Asia",
     "Singapore": "Asia",
     "South Korea": "Asia",

@@ -13,7 +13,7 @@ TEAL = "#118A8A"
 CARD_BORDER = "#D8E2EE"
 PLOT_BG = "#FBFCFE"
 PLOT_GRID = "#EAF0F6"
-COLORWAY = [RED, ORANGE, BLUE, TEAL, PURPLE, GREEN]
+COLORWAY = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#000000"]
 
 FONT_FAMILY = '"Avenir Next", "SF Pro Display", "Helvetica Neue", "Segoe UI", sans-serif'
 
