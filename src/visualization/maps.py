@@ -45,7 +45,7 @@ def create_choropleth_map(df: pd.DataFrame, year: int, metric: str = "co2", sele
         color=metric,
         hover_name="country",
         hover_data=hover_data,
-        color_continuous_scale=["#FFF7D6", "#F6C85F", "#B7791F", "#5C2E0E"],
+        color_continuous_scale=["#FFF1F0", "#F8B4AC", "#D94C45", "#8F1D1B"],
         labels={**FRIENDLY_LABELS, "region_label": "Region"},
         title=title,
     )

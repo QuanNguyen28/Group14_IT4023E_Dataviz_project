@@ -38,7 +38,7 @@ def _fuel_region_options(regions, fuel_long):
 
 def render_current_trend_analysis(country_df, fuel_long) -> None:
     page_header("CURRENT TREND ANALYSIS", "Who is changing fastest today?", "#D94C45", "Momentum scanner")
-    years, regions, incomes, _ = common_filter_values(country_df)
+    years, regions, _, _ = common_filter_values(country_df)
     latest = max(years)
     earliest = min(years)
     base_year, end_year = 2022, 2024
@@ -48,9 +48,7 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         if earliest > base_year or latest < end_year:
             st.warning("The 2022-2024 trend window is not available in this dataset.")
             return
-        st.caption("Quadrant window is fixed to 2022-2024.")
         region = st.selectbox("Region", regions)
-        income = st.selectbox("Income Group", incomes)
         selected_fuel_region = st.selectbox("Fuel Region", fuel_options, index=fuel_default_index)
     y_label = "GDP Per Capita"
     y_metric = "gdp_per_capita"
@@ -58,8 +56,6 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
     trends = compute_country_trends(country_df, base_year, end_year)
     if region != "All" and "region" in trends:
         trends = trends[trends["region"].eq(region)]
-    if income != "All" and "income_group" in trends:
-        trends = trends[trends["income_group"].eq(income)]
     increasing = get_fastest_increasing(trends, 10)
     declining = get_fastest_declining(trends, 10)
     fuel_change = compute_fuel_share_change(fuel_long, selected_fuel_region)
@@ -68,7 +64,6 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         ("Window", f"{base_year}-{end_year}"),
         ("Y-axis", y_label),
         ("Region", region),
-        ("Income", income),
         ("Fuel region", selected_fuel_region),
     ])
     section_header("Growth, Emissions Profile, and Momentum Rankings", "Bubble size encodes current scale; the two rankings isolate fastest movers.", "Signal Scan")

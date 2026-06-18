@@ -54,7 +54,6 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         st.session_state.page1_country_select = pending_country
     with st.sidebar:
         st.markdown("### Filters")
-        st.caption(f"Snapshot uses latest available year: {year}.")
         metric_label = st.radio("Metric", ["Total CO2", "CO2 Per Capita"], horizontal=True)
         region = st.selectbox("Region", regions)
         selected_country = st.selectbox(
