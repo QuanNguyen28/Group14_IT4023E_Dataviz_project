@@ -30,24 +30,7 @@ CSS = """
     --shadow-medium: 0 14px 32px rgba(11, 28, 48, .10);
 }
 
-#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] { visibility: hidden; }
-[data-testid="collapsedControl"] {
-    visibility: visible !important;
-    display: flex !important;
-    position: fixed !important;
-    top: .8rem;
-    left: .8rem;
-    z-index: 1002 !important;
-    border-radius: 999px;
-    background: rgba(255,255,255,.96) !important;
-    border: 1px solid rgba(22,163,74,.25) !important;
-    box-shadow: 0 10px 24px rgba(11, 28, 48, .12);
-}
-[data-testid="collapsedControl"] button,
-[data-testid="collapsedControl"] svg {
-    color: #166534 !important;
-    fill: #166534 !important;
-}
+#MainMenu, footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { visibility: hidden; }
 [data-testid="stSidebarNav"],
 [data-testid="stSidebarNavItems"],
 [data-testid="stSidebarUserContent"] > div:first-child:has([data-testid="stSidebarNav"]) {
