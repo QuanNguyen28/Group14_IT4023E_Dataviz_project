@@ -11,13 +11,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from src.analysis.trends import (
-    compute_country_trends, compute_fuel_share_change,
-    get_fastest_declining, get_fastest_increasing,
-)
+from src.analysis.trends import compute_country_trends, compute_fuel_share_change
 from src.visualization.charts import (
-    create_bubble_scatter, create_fastest_declining_bar, create_fastest_increasing_bar,
-    create_fuel_decomposition_area, create_fuel_share_change_table_or_panel,
+    create_bubble_scatter, create_fuel_decomposition_area, create_fuel_share_change_table_or_panel,
+    create_growth_volume_scatter,
 )
 from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header
 from streamlit_app.components.sidebar import common_filter_values
@@ -56,8 +53,6 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
     trends = compute_country_trends(country_df, base_year, end_year)
     if region != "All" and "region" in trends:
         trends = trends[trends["region"].eq(region)]
-    increasing = get_fastest_increasing(trends, 10)
-    declining = get_fastest_declining(trends, 10)
     fuel_change = compute_fuel_share_change(fuel_long, selected_fuel_region)
 
     filter_summary([
@@ -66,16 +61,22 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         ("Region", region),
         ("Fuel region", selected_fuel_region),
     ])
-    section_header("Growth, Emissions Profile, and Momentum Rankings", "Bubble size encodes current scale; the two rankings isolate fastest movers.", "Signal Scan")
-    top_left, top_mid, top_right = st.columns([1.55, .88, .88])
+    section_header(
+        "Growth Rate & Emissions Profile",
+        "Left: growth vs wealth (bubble size = volume). Right: growth rate vs absolute volume — uniform dots, position is the signal.",
+        "Signal Scan",
+    )
+    top_left, top_right = st.columns([1, 1])
     with top_left:
         st.plotly_chart(create_bubble_scatter(trends, y_metric), width="stretch", config=PLOTLY_CONFIG)
-    with top_mid:
-        st.plotly_chart(create_fastest_increasing_bar(increasing), width="stretch", config=PLOTLY_CONFIG)
     with top_right:
-        st.plotly_chart(create_fastest_declining_bar(declining), width="stretch", config=PLOTLY_CONFIG)
+        st.plotly_chart(
+            create_growth_volume_scatter(trends, label_n=4),
+            width="stretch",
+            config=PLOTLY_CONFIG,
+        )
 
-    section_header("Fuel Mix Decomposition", "A 100 percent stacked area chart shows how the selected region's emissions sources are changing.", "Decomposition")
+    section_header("Fuel Mix Decomposition", "An absolute stacked area chart shows how the selected region's emissions sources have grown or shrunk in real volume.", "Decomposition")
     bottom_left, bottom_right = st.columns([1.55, .85])
     with bottom_left:
         st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_fuel_region), width="stretch", config=PLOTLY_CONFIG)

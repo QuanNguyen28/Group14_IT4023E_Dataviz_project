@@ -13,6 +13,7 @@ import streamlit as st
 
 from src.analysis.metrics import compute_global_kpis
 from src.analysis.rankings import compute_regional_totals, get_top_emitters
+from src.utils.formatting import fmt_mt_as_gt
 from src.visualization.charts import create_top_emitters_bar, create_treemap
 from src.visualization.maps import create_choropleth_map
 from streamlit_app.components.kpi_cards import render_kpis

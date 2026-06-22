@@ -30,7 +30,38 @@ CSS = """
     --shadow-medium: 0 14px 32px rgba(11, 28, 48, .10);
 }
 
-#MainMenu, footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] { visibility: hidden; }
+#MainMenu, footer, [data-testid="stDecoration"] { visibility: hidden; }
+/* Keep the header/toolbar present (it hosts the sidebar expand/collapse
+   controls) but strip it down to just those controls so it stays invisible
+   in normal use yet the open/close button is always reachable. */
+header[data-testid="stHeader"] {
+    visibility: visible;
+    background: transparent;
+    box-shadow: none;
+    height: 2.6rem;
+}
+[data-testid="stToolbar"] { visibility: visible; }
+[data-testid="stMainMenu"],
+[data-testid="stToolbarActions"],
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"] {
+    display: none !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] button {
+    color: #0F8B5F !important;
+    background: rgba(15,139,95,.10) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stExpandSidebarButton"]:hover,
+[data-testid="stSidebarCollapseButton"] button:hover {
+    background: rgba(15,139,95,.20) !important;
+}
 [data-testid="stSidebarNav"],
 [data-testid="stSidebarNavItems"],
 [data-testid="stSidebarUserContent"] > div:first-child:has([data-testid="stSidebarNav"]) {
@@ -72,7 +103,15 @@ section[data-testid="stSidebar"] {
     box-shadow: 14px 0 42px rgba(16, 105, 60, .16);
 }
 section[data-testid="stSidebar"] > div {
-    width: 258px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+/* Radio group: allow wrapping so labels don't overflow when sidebar is narrow */
+section[data-testid="stSidebar"] [role="radiogroup"] {
+    flex-wrap: wrap !important;
 }
 section[data-testid="stSidebar"] .block-container,
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
@@ -357,6 +396,82 @@ section[data-testid="stSidebar"] div[data-testid="stButton"] > button p {
 .filter-value {
     color: var(--ink-900);
     font-weight: 900;
+}
+
+.country-detail-panel {
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--accent, #0F8B5F);
+    border-radius: 9px;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFEFC 100%);
+    padding: .78rem .85rem .85rem;
+    box-shadow: var(--shadow-soft);
+    margin-bottom: .55rem;
+}
+.country-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-bottom: .6rem;
+}
+.country-detail-name {
+    font-size: 1.05rem;
+    font-weight: 950;
+    color: var(--ink-900);
+}
+.country-detail-tags {
+    display: flex;
+    gap: .36rem;
+    flex-wrap: wrap;
+}
+.country-detail-tag {
+    border: 1px solid var(--line);
+    background: #F4F7FB;
+    color: var(--ink-700);
+    border-radius: 999px;
+    padding: .2rem .56rem;
+    font-size: .68rem;
+    font-weight: 850;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: .5rem;
+}
+.detail-stat {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #FFFFFF;
+    padding: .46rem .56rem;
+}
+.detail-stat-label {
+    font-size: .62rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-weight: 850;
+    color: var(--ink-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.detail-stat-value {
+    font-size: .92rem;
+    font-weight: 900;
+    color: var(--ink-900);
+    margin-top: .12rem;
+}
+.country-detail-hint {
+    border: 1px dashed var(--line-strong);
+    border-radius: 9px;
+    background: rgba(255,255,255,.6);
+    color: var(--ink-500);
+    font-size: .78rem;
+    font-weight: 650;
+    padding: .6rem .75rem;
+    margin-bottom: .55rem;
 }
 
 .section-heading {

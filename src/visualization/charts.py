@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from src.analysis.trends import compute_fuel_shares
+from src.analysis.trends import compute_fuel_absolute
 from src.utils.constants import FUEL_COLORS, FUEL_COLUMNS, REGION_COLORS, REGIONS
 from src.visualization.theme import BLUE, GREEN, NAVY, ORANGE, RED, apply_common_layout
 
@@ -289,34 +289,91 @@ def create_regional_line(df: pd.DataFrame, metric: str = "co2"):
     return _with_chart_margins(apply_common_layout(fig, 430), l=58, r=26, t=78, b=92)
 
 
-def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita"):
+_BUBBLE_CHART_META = {
+    "gdp_per_capita": {
+        "title": "CO2 Growth vs GDP per Capita",
+        "quadrants": [
+            (0.74, 0.86, "Richer<br>growing"),
+            (0.26, 0.86, "Richer<br>declining"),
+            (0.74, 0.18, "Lower income<br>growing"),
+            (0.26, 0.18, "Lower income<br>declining"),
+        ],
+    },
+    "co2_per_capita": {
+        "title": "CO2 Growth vs Per-Capita Emissions",
+        "quadrants": [
+            (0.74, 0.86, "High emitter<br>growing"),
+            (0.26, 0.86, "High emitter<br>declining"),
+            (0.74, 0.18, "Low emitter<br>growing"),
+            (0.26, 0.18, "Low emitter<br>declining"),
+        ],
+    },
+    "co2": {
+        "title": "CO2 Growth vs Total Emissions",
+        "quadrants": [
+            (0.74, 0.86, "Large emitter<br>growing"),
+            (0.26, 0.86, "Large emitter<br>declining"),
+            (0.74, 0.18, "Small emitter<br>growing"),
+            (0.26, 0.18, "Small emitter<br>declining"),
+        ],
+    },
+}
+
+
+def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita", highlight_extremes: int = 0):
     # Power BI equivalent: scatter chart with size and legend encodings.
+    # Bubble size always encodes current emissions volume ("co2"), independent of the y-axis metric.
+    # FIX 1: Use logarithmic emission scale for co2 and co2_per_capita y-axes.
+    # FIX 2: Label top emitters by volume + CAGR outliers (not just CAGR extremes).
+    # FIX 3: Use median of raw (unlogged) emission values as the quadrant split line.
+    # FIX 4: Increase point transparency from 0.82 → 0.62.
     needed = {"co2_cagr", y_metric, "co2", "region"}
     work = df.dropna(subset=[c for c in needed if c in df.columns]).copy()
     if y_metric in {"co2_per_capita", "gdp_per_capita"}:
         work = work[work[y_metric] > 0]
+    chart_title = _BUBBLE_CHART_META.get(y_metric, _BUBBLE_CHART_META["co2_per_capita"])["title"]
     if work.empty:
-        return _empty("CO2 Growth Rate vs Emissions Profile")
+        return _empty(chart_title)
+
+    # --- Axis setup with FIX 1 (log scale) ---
+    use_log_y = False
     if y_metric == "co2":
-        work["y_display"] = work[y_metric] / 1000
+        # FIX 1: log scale on total emissions to spread the long tail
+        work = work[work[y_metric] > 0]
+        work["y_display"] = np.log10(work[y_metric] / 1000)   # log10(Gt)
         y_axis_title = "Total CO2 (Gt)"
         y_hover = work[y_metric] / 1000
         y_hover_unit = "Gt"
+        use_log_y = True
+        # FIX 3: median split on raw Gt values → convert to log space
+        y_median_raw = (work[y_metric] / 1000).median()
+        y_median = np.log10(y_median_raw) if y_median_raw > 0 else work["y_display"].median()
     elif y_metric == "gdp_per_capita":
         work["y_display"] = np.log10(work[y_metric])
         y_axis_title = "GDP per capita"
         y_hover = work[y_metric]
         y_hover_unit = "USD/person"
-    else:
-        work["y_display"] = work[y_metric]
-        y_axis_title = "CO2 per capita"
+        # FIX 3: median split on raw GDP values → log space
+        y_median_raw = work[y_metric].median()
+        y_median = np.log10(y_median_raw) if y_median_raw > 0 else work["y_display"].median()
+    else:  # co2_per_capita
+        # FIX 1: log scale for per-capita too
+        work = work[work[y_metric] > 0]
+        work["y_display"] = np.log10(work[y_metric])
+        y_axis_title = "CO2 per capita (t/person)"
         y_hover = work[y_metric]
         y_hover_unit = "t/person"
-    y_median = work["y_display"].median()
+        use_log_y = True
+        # FIX 3: median split on raw per-capita values → log space
+        y_median_raw = work[y_metric].median()
+        y_median = np.log10(y_median_raw) if y_median_raw > 0 else work["y_display"].median()
+
     work = _with_region_label(work)
     work["y_hover"] = y_hover
     work["gdp_year_display"] = work.get("gdp_year", pd.Series(np.nan, index=work.index)).fillna(np.nan)
     work["population_display"] = work.get("population", pd.Series(np.nan, index=work.index)).fillna(np.nan)
+
+    # FIX 4: opacity lowered to 0.62 for better overlap visibility
     fig = px.scatter(
         work,
         x="co2_cagr",
@@ -325,10 +382,12 @@ def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita"):
         color="region_label",
         color_discrete_map=DISPLAY_REGION_COLORS,
         custom_data=["country", "region_label", "y_hover", "co2", "gdp_year_display", "population_display"],
-        title="CO2 Growth vs Economic Profile",
+        title=chart_title,
         size_max=42,
-        opacity=0.82,
+        opacity=0.62,  # FIX 4: was 0.82
     )
+
+    # FIX 3: quadrant divider at median of raw emission values
     y_line = y_median
     y_min, y_max = work["y_display"].min(), work["y_display"].max()
     x_abs = max(abs(work["co2_cagr"].min()), abs(work["co2_cagr"].max()), 0.01) * 1.12
@@ -347,7 +406,7 @@ def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita"):
             "<b>%{customdata[0]}</b><br>"
             "Region: %{customdata[1]}<br>"
             "CO2 CAGR: %{x:+.2%}<br>"
-            f"{y_axis_title}: %{{customdata[2]:,.0f}} {y_hover_unit}<br>"
+            f"{y_axis_title}: %{{customdata[2]:,.2f}} {y_hover_unit}<br>"
             "Total CO2: %{customdata[3]:,.1f} Mt<br>"
             "GDP year: %{customdata[4]:.0f}<br>"
             "Population: %{customdata[5]:,.0f}"
@@ -356,36 +415,165 @@ def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita"):
     )
     fig.update_xaxes(tickformat=".0%", title="CO2 CAGR, 2022-2024", zeroline=False)
     fig.update_xaxes(range=[x_min, x_max])
+
+    # Axis tick formatting — log scales get human-readable labels
     if y_metric == "gdp_per_capita":
         tick_values = [1000, 2000, 5000, 10000, 20000, 50000, 100000]
         tick_vals = [np.log10(v) for v in tick_values if y_low <= np.log10(v) <= y_high]
         tick_text = [f"${int(v / 1000)}k" for v in tick_values if y_low <= np.log10(v) <= y_high]
         fig.update_yaxes(title="GDP per capita", range=[y_low, y_high], tickmode="array", tickvals=tick_vals, ticktext=tick_text)
+    elif y_metric == "co2":
+        # FIX 1: human-readable log ticks in Gt
+        tick_vals_gt = [0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20]
+        tick_vals_log = [np.log10(v) for v in tick_vals_gt if y_low <= np.log10(v) <= y_high]
+        tick_text_gt = [f"{v:g} Gt" for v in tick_vals_gt if y_low <= np.log10(v) <= y_high]
+        fig.update_yaxes(title=y_axis_title, range=[y_low, y_high], tickmode="array", tickvals=tick_vals_log, ticktext=tick_text_gt)
+    elif y_metric == "co2_per_capita":
+        # FIX 1: human-readable log ticks in t/person
+        tick_vals_pc = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]
+        tick_vals_log = [np.log10(v) for v in tick_vals_pc if y_low <= np.log10(v) <= y_high]
+        tick_text_pc = [f"{v:g} t" for v in tick_vals_pc if y_low <= np.log10(v) <= y_high]
+        fig.update_yaxes(title=y_axis_title, range=[y_low, y_high], tickmode="array", tickvals=tick_vals_log, ticktext=tick_text_pc)
     else:
         fig.update_yaxes(title=y_axis_title, type="linear", range=[y_low, y_high])
-    quadrant_labels = [
-        (0.74, 0.86, "Richer<br>growing"),
-        (0.26, 0.86, "Richer<br>declining"),
-        (0.74, 0.18, "Lower income<br>growing"),
-        (0.26, 0.18, "Lower income<br>declining"),
-    ]
+
+    quadrant_labels = _BUBBLE_CHART_META.get(y_metric, _BUBBLE_CHART_META["co2_per_capita"])["quadrants"]
     for x, y, text in quadrant_labels:
         fig.add_annotation(x=x, y=y, xref="paper", yref="paper", text=text, showarrow=False, align="center", font=dict(color="#334155", size=11), bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, borderpad=4)
+
+    # FIX 2: label top emitters by volume + CAGR outliers (not just CAGR extremes)
+    if highlight_extremes > 0 and len(work) > 1:
+        n = min(highlight_extremes, len(work) // 2 or 1)
+        top_volume = work.nlargest(n, "co2")
+        cagr_extremes = pd.concat([
+            work.nlargest(n, "co2_cagr"),
+            work.nsmallest(n, "co2_cagr"),
+        ])
+        extremes = pd.concat([top_volume, cagr_extremes]).drop_duplicates(subset=["country"]).sort_values("co2_cagr")
+        for i, (_, erow) in enumerate(extremes.iterrows()):
+            offset = -22 if i % 2 == 0 else 22
+            fig.add_annotation(
+                x=erow["co2_cagr"], y=erow["y_display"],
+                text=_short_country_label(erow["country"], max_len=14),
+                showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor="#9AA7BC",
+                ax=0, ay=offset,
+                font=dict(size=9.5, color=NAVY),
+                bgcolor="rgba(255,255,255,.92)", bordercolor="#D8E2EE", borderwidth=1, borderpad=2,
+            )
     fig = apply_common_layout(fig, 520)
     fig.update_layout(
         legend_title_text="Region",
         legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5, bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, font=dict(size=10)),
-        title=dict(text="CO2 Growth vs GDP per Capita", font=dict(size=15, color=NAVY), x=0.02, y=0.97),
+        title=dict(text=chart_title, font=dict(size=15, color=NAVY), x=0.02, y=0.97),
     )
     return _with_chart_margins(fig, l=64, r=28, t=70, b=118)
 
 
-def create_fastest_increasing_bar(df: pd.DataFrame):
-    return _trend_bar(df, "Fastest Increasing Countries", RED)
 
+def create_growth_volume_scatter(df, label_n=4):
+    """Scatter: x = CO2 growth rate (CAGR), y = total CO2 volume (Gt).
 
-def create_fastest_declining_bar(df: pd.DataFrame):
-    return _trend_bar(df, "Fastest Declining Countries", "#16834A")
+    Uniform dot size — position alone carries the information.
+    Colour encodes region.
+    FIX 1: Log scale on y-axis to spread the long tail of emission volumes.
+    FIX 2: Label top emitters by volume + CAGR outliers.
+    FIX 3: Quadrant split at median of raw Gt values (converted to log space).
+    FIX 4: Opacity lowered from 0.82 → 0.62 for better overlap visibility.
+    """
+    needed = {"co2_cagr", "co2", "region", "country"}
+    work = df.dropna(subset=[c for c in needed if c in df.columns]).copy()
+    work = work[work["co2"] > 0]
+    if work.empty:
+        return _empty("CO2 Growth Rate vs Volume")
+    work["co2_gt"] = work["co2"] / 1000
+    # FIX 1: log-transform for display; keep raw for median calc
+    work["co2_gt_log"] = np.log10(work["co2_gt"])
+    work = _with_region_label(work)
+    x_abs = max(abs(work["co2_cagr"].min()), abs(work["co2_cagr"].max()), 0.01) * 1.1
+    # FIX 3: median split on raw Gt (not log-transformed median)
+    y_med_raw = work["co2_gt"].median()
+    y_med_log = np.log10(y_med_raw) if y_med_raw > 0 else work["co2_gt_log"].median()
+    y_min_log = work["co2_gt_log"].min() - 0.05
+    y_max_log = work["co2_gt_log"].max() * 1.04
+    # FIX 4: opacity 0.62 (was 0.82)
+    fig = px.scatter(
+        work,
+        x="co2_cagr",
+        y="co2_gt_log",
+        color="region_label",
+        color_discrete_map=DISPLAY_REGION_COLORS,
+        custom_data=["country", "region_label", "co2_gt", "co2_cagr"],
+        title="CO2 Growth Rate vs Emissions Volume",
+        opacity=0.62,  # FIX 4
+    )
+    fig.update_traces(
+        marker=dict(size=7, line=dict(width=0.6, color="white")),
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "Region: %{customdata[1]}<br>"
+            "Total CO2: %{customdata[2]:,.2f} Gt<br>"
+            "CAGR: %{customdata[3]:+.2%}"
+            "<extra></extra>"
+        ),
+    )
+    # FIX 3: Quadrant shading centred on log(median) of raw Gt
+    for (x0, x1), (y0, y1), alpha in [
+        ((0, x_abs), (y_med_log, y_max_log), 0.045),
+        ((-x_abs, 0), (y_med_log, y_max_log), 0.025),
+        ((0, x_abs), (y_min_log, y_med_log), 0.030),
+        ((-x_abs, 0), (y_min_log, y_med_log), 0.015),
+    ]:
+        fig.add_shape(type="rect", xref="x", yref="y",
+                      x0=x0, x1=x1, y0=y0, y1=y1,
+                      fillcolor=f"rgba(12,34,53,{alpha})", line_width=0, layer="below")
+    fig.add_vline(x=0, line_dash="dot", line_color="#697791")
+    fig.add_hline(y=y_med_log, line_dash="dot", line_color="#697791")
+    for xp, yp, text in [
+        (0.74, 0.88, "Large emitter<br>growing"),
+        (0.26, 0.88, "Large emitter<br>declining"),
+        (0.74, 0.14, "Small emitter<br>growing"),
+        (0.26, 0.14, "Small emitter<br>declining"),
+    ]:
+        fig.add_annotation(
+            x=xp, y=yp, xref="paper", yref="paper",
+            text=text, showarrow=False, align="center",
+            font=dict(color="#334155", size=10.5),
+            bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, borderpad=4,
+        )
+    # FIX 2: label top emitters by volume + CAGR outliers
+    n = min(label_n, max(1, len(work) // 4))
+    top_volume = work.nlargest(n, "co2_gt")
+    cagr_extremes = pd.concat([
+        work.nlargest(n, "co2_cagr"),
+        work.nsmallest(n, "co2_cagr"),
+    ])
+    to_label = pd.concat([top_volume, cagr_extremes]).drop_duplicates(subset=["country"]).sort_values("co2_cagr")
+    for i, (_, row) in enumerate(to_label.iterrows()):
+        ay = -22 if i % 2 == 0 else 22
+        fig.add_annotation(
+            x=row["co2_cagr"], y=row["co2_gt_log"],
+            text=_short_country_label(str(row["country"]), max_len=14),
+            showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor="#9AA7BC",
+            ax=0, ay=ay,
+            font=dict(size=9.5, color=NAVY),
+            bgcolor="rgba(255,255,255,.92)", bordercolor="#D8E2EE", borderwidth=1, borderpad=2,
+        )
+    # FIX 1: human-readable log ticks on y-axis
+    tick_vals_gt = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20]
+    tick_vals_log = [np.log10(v) for v in tick_vals_gt if y_min_log <= np.log10(v) <= y_max_log]
+    tick_text_gt = [f"{v:g} Gt" for v in tick_vals_gt if y_min_log <= np.log10(v) <= y_max_log]
+    fig.update_xaxes(tickformat=".0%", title="CO2 CAGR, 2022-2024",
+                     range=[-x_abs, x_abs], zeroline=False)
+    fig.update_yaxes(title="Total CO2 (Gt, log scale)", range=[y_min_log, y_max_log],
+                     tickmode="array", tickvals=tick_vals_log, ticktext=tick_text_gt)
+    fig = apply_common_layout(fig, 520)
+    fig.update_layout(
+        legend_title_text="Region",
+        legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5,
+                    bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, font=dict(size=10)),
+        title=dict(text="CO2 Growth Rate vs Emissions Volume", font=dict(size=15, color=NAVY), x=0.02, y=0.97),
+    )
+    return _with_chart_margins(fig, l=64, r=28, t=70, b=118)
 
 
 def _short_country_label(country: str, max_len: int = 16) -> str:
@@ -399,91 +587,53 @@ def _short_country_label(country: str, max_len: int = 16) -> str:
     return label if len(label) <= max_len else f"{label[:max_len - 1]}..."
 
 
-def _trend_bar(df: pd.DataFrame, title: str, color: str):
-    if df.empty or "co2_cagr" not in df.columns:
-        return _empty(title)
-    work = df.dropna(subset=["co2_cagr"]).copy()
-    if work.empty:
-        return _empty(title)
-    work = _with_region_label(work)
-    work["magnitude"] = work["co2_cagr"].abs()
-    work = work.sort_values("magnitude", ascending=True)
-    values = work["magnitude"]
-    if values.max() <= 0:
-        return _empty(title)
-    labels = [f"{v*100:+.1f}%" for v in work["co2_cagr"]]
-    country_labels = [_short_country_label(country) for country in work["country"]]
-    fig = go.Figure(go.Bar(
-        x=values,
-        y=country_labels,
-        orientation="h",
-        marker=dict(color=[DISPLAY_REGION_COLORS.get(region, PRIMARY_BAR) for region in work["region_label"]], line=dict(color="rgba(255,255,255,.92)", width=1)),
-        text=labels,
-        textposition="outside",
-        cliponaxis=False,
-        customdata=np.stack([work["country"], work["co2_cagr"], work["region_label"]], axis=-1),
-        hovertemplate="<b>%{customdata[0]}</b><br>Region: %{customdata[2]}<br>CAGR: %{customdata[1]:+.2%}<extra></extra>",
-    ))
-    tickformat = ".1%" if values.max() < 0.01 else ".0%"
-    fig.update_xaxes(tickformat=tickformat, range=[0, values.max() * 1.42], nticks=4)
-    fig.update_yaxes(categoryorder="array", categoryarray=country_labels, tickfont=dict(size=10))
-    fig.update_layout(
-        title=title,
-        xaxis_title="CAGR magnitude",
-        yaxis_title="",
-        bargap=0.42,
-        showlegend=False,
-    )
-    fig = apply_common_layout(fig, 520)
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=15, color=NAVY), x=0.02, y=0.97),
-        xaxis_title=dict(text="CAGR magnitude", font=dict(size=11)),
-    )
-    fig.update_xaxes(showgrid=True, zeroline=False)
-    return _with_chart_margins(fig, l=98, r=78, t=62, b=50)
-
-
 def create_fuel_decomposition_area(fuel_long: pd.DataFrame, region: str):
-    # Power BI equivalent: 100% stacked area chart.
-    shares = compute_fuel_shares(fuel_long, region).dropna(subset=["share"]).copy()
-    if shares.empty or shares["share"].sum() <= 0:
+    # Power BI equivalent: absolute stacked area chart (native Mt/Gt units, not normalized to 100%).
+    absolute = compute_fuel_absolute(fuel_long, region).dropna(subset=["value"]).copy()
+    if absolute.empty or absolute["value"].sum() <= 0:
         return _empty(f"Fuel Mix by Source - {region}")
     fuel_order = list(FUEL_COLUMNS.values())
-    shares = shares[shares["fuel_source"].isin(fuel_order)]
-    share_wide = (
-        shares.pivot_table(index="year", columns="fuel_source", values="share", aggfunc="sum")
+    absolute = absolute[absolute["fuel_source"].isin(fuel_order)]
+    value_wide = (
+        absolute.pivot_table(index="year", columns="fuel_source", values="value", aggfunc="sum")
         .reindex(columns=fuel_order)
         .fillna(0)
         .sort_index()
     )
-    if share_wide.empty or share_wide.to_numpy().sum() <= 0:
+    if value_wide.empty or value_wide.to_numpy().sum() <= 0:
         return _empty(f"Fuel Mix by Source - {region}")
+
+    # Express in Gt CO2 once totals get large enough that Mt is hard to read.
+    use_gt = value_wide.to_numpy().max(initial=0) >= 1000 or value_wide.sum(axis=1).max() >= 1000
+    scale = 1000 if use_gt else 1
+    unit = "Gt" if use_gt else "Mt"
 
     fig = go.Figure()
     for source in fuel_order:
-        values = share_wide[source]
+        values = value_wide[source] / scale
         if values.sum() <= 0:
             continue
         color = FUEL_COLORS.get(source, "#667A94")
         fig.add_trace(go.Scatter(
-            x=share_wide.index,
+            x=value_wide.index,
             y=values,
             name=source,
             mode="lines",
             stackgroup="fuel",
             line=dict(width=1.1, color=color),
             fillcolor=_hex_to_rgba(color, 0.82),
-            hovertemplate=f"<b>{source}</b><br>Year: %{{x}}<br>Share: %{{y:.1f}}%<extra></extra>",
+            hovertemplate=f"<b>{source}</b><br>Year: %{{x}}<br>Emissions: %{{y:,.2f}} {unit}<extra></extra>",
         ))
-    fig.update_yaxes(range=[0, 100], ticksuffix="%")
+    fig.update_yaxes(rangemode="tozero", ticksuffix=f" {unit}")
     fig.update_layout(
-        yaxis_title="Share of CO2 emissions",
+        yaxis_title=f"CO2 emissions ({unit})",
         xaxis_title="",
         legend_title_text="",
         hovermode="x unified",
         title=f"Fuel Mix by Source - {region}",
     )
     return _with_chart_margins(apply_common_layout(fig, 440), l=58, r=26, t=78, b=96)
+
 
 
 def create_fuel_share_change_table_or_panel(change_df: pd.DataFrame):

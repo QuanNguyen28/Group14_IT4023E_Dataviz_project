@@ -24,6 +24,65 @@ def compute_share_of_world(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def compute_country_detail(country_df: pd.DataFrame, year: int, country: str) -> dict | None:
+    """Pull together the most decision-relevant attributes for one country/year.
+
+    Used to power the drill-down detail panel that appears when a country is
+    selected (e.g. by clicking its label in the treemap), so the user sees a
+    rounded profile rather than just the name and total CO2 figure.
+    """
+    if not country or country == "World" or country_df.empty:
+        return None
+    row = country_df.loc[country_df["year"].eq(year) & country_df["country"].eq(country)]
+    if row.empty:
+        return None
+    r = row.iloc[0]
+
+    population = r.get("population")
+    gdp_per_capita = np.nan
+    gdp_year = None
+    gdp_history = country_df.loc[
+        country_df["country"].eq(country) & country_df["year"].le(year),
+        ["year", "gdp", "population"],
+    ].dropna(subset=["gdp", "population"])
+    gdp_history = gdp_history[(gdp_history["gdp"] > 0) & (gdp_history["population"] > 0)]
+    if not gdp_history.empty:
+        latest_gdp_row = gdp_history.sort_values("year").iloc[-1]
+        gdp_per_capita = latest_gdp_row["gdp"] / latest_gdp_row["population"]
+        gdp_year = int(latest_gdp_row["year"])
+
+    fuel_labels = {
+        "coal_co2": "Coal", "oil_co2": "Oil", "gas_co2": "Gas",
+        "cement_co2": "Cement", "flaring_co2": "Flaring",
+    }
+    fuel_values = {label: r.get(col) for col, label in fuel_labels.items() if pd.notna(r.get(col))}
+    dominant_fuel, dominant_fuel_value = (None, None)
+    if fuel_values:
+        dominant_fuel, dominant_fuel_value = max(fuel_values.items(), key=lambda kv: kv[1])
+    total_co2 = r.get("co2")
+    dominant_fuel_share = (
+        dominant_fuel_value / total_co2 * 100
+        if dominant_fuel_value is not None and pd.notna(total_co2) and total_co2 else np.nan
+    )
+
+    return {
+        "country": r.get("country", country),
+        "region": r.get("region", "Unknown") or "Unknown",
+        "income_group": r.get("income_group", "Unknown") or "Unknown",
+        "year": year,
+        "population": population,
+        "gdp_per_capita": gdp_per_capita,
+        "gdp_year": gdp_year,
+        "co2": total_co2,
+        "co2_per_capita": r.get("co2_per_capita"),
+        "share_of_world_co2": r.get("share_of_world_co2"),
+        "cumulative_co2": r.get("cumulative_co2"),
+        "co2_growth_prct": r.get("co2_growth_prct"),
+        "dominant_fuel": dominant_fuel,
+        "dominant_fuel_share": dominant_fuel_share,
+    }
+
+
 def compute_global_kpis(country_df: pd.DataFrame, aggregate_df: pd.DataFrame, year: int, selected_country: str = "World") -> dict:
     year_countries = country_df.loc[country_df["year"].eq(year)].copy()
     year_aggregates = aggregate_df.loc[aggregate_df["year"].eq(year)].copy()

@@ -42,8 +42,36 @@ def fmt_pct(value: Any, decimals: int = 1) -> str:
     return f"{float(value) * 100:.{decimals}f}%"
 
 
+def fmt_usd(value: Any, decimals: int = 0) -> str:
+    if is_missing(value):
+        return "No data"
+    value = float(value)
+    if abs(value) >= 1_000:
+        return f"${value / 1_000:.1f}k"
+    return f"${value:.{decimals}f}"
+
+
+def fmt_pp(value: Any, decimals: int = 1) -> str:
+    """Format a value already expressed in percentage-point units (not a fraction)."""
+    if is_missing(value):
+        return "No data"
+    return f"{float(value):+.{decimals}f}%"
+
+
+def fmt_people(value: Any, decimals: int = 1) -> str:
+    if is_missing(value):
+        return "No data"
+    value = float(value)
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.{decimals}f}M"
+    if abs(value) >= 1_000:
+        return f"{value / 1_000:.{decimals}f}k"
+    return f"{value:.0f}"
+
+
 def fmt_share(value: Any, decimals: int = 1) -> str:
     if is_missing(value):
         return "No data"
     return f"{float(value):.{decimals}f}%"
+
 

@@ -62,6 +62,21 @@ def compute_fuel_shares(fuel_long: pd.DataFrame, region: str) -> pd.DataFrame:
     return df
 
 
+def compute_fuel_absolute(fuel_long: pd.DataFrame, region: str) -> pd.DataFrame:
+    """Year x fuel-source totals in their native Mt CO2 units (no normalization).
+
+    Companion to compute_fuel_shares: that function expresses each fuel's
+    contribution as a 0-100% share of the year's total, this one keeps the
+    absolute Mt CO2 values so growth/decline in real volume is visible.
+    """
+    if "region" not in fuel_long.columns:
+        return pd.DataFrame()
+    df = fuel_long.loc[fuel_long["region"].eq(region)].copy()
+    if df.empty:
+        return df
+    return df.groupby(["year", "fuel_source"], as_index=False)["value"].sum()
+
+
 def compute_fuel_share_change(fuel_long: pd.DataFrame, region: str) -> pd.DataFrame:
     shares = compute_fuel_shares(fuel_long, region)
     if shares.empty:
