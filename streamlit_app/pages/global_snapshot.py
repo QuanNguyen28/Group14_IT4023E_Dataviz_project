@@ -70,12 +70,13 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     filtered = _filter(country_df, region)
     selected_country = st.session_state.page1_country_select
 
-    # If the selected country changed via sidebar/map, update the treemap level to match
-    if selected_country and selected_country != "World":
+    # If the selected country changed via sidebar/map, update the treemap level to match.
+    # When no country is selected, always reset to root so the stats panel disappears.
+    if not selected_country or selected_country == "World":
+        st.session_state.page1_treemap_level = ""
+    else:
         expected_level = f"country:{selected_country}"
         if st.session_state.page1_treemap_level != expected_level:
-            # Only auto-update the level when a new country is actively selected
-            # (not when the user manually navigated the treemap to a region)
             current_level = st.session_state.page1_treemap_level
             if not current_level.startswith("region:"):
                 st.session_state.page1_treemap_level = expected_level
@@ -89,6 +90,15 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     ])
     render_kpis(kpis)
     section_header("Spatial and Regional Composition", "Country distribution on the left, regional part-to-whole structure on the right.", "Snapshot")
+
+    # Resolve country row once — passed into the treemap so stats appear inside the chart
+    country_row = None
+    if selected_country and selected_country != "World":
+        _cr = country_df.loc[
+            country_df["country"].eq(selected_country) & country_df["year"].eq(year)
+        ]
+        if not _cr.empty:
+            country_row = _cr.iloc[0]
 
     left, right = st.columns([1.25, 1])
     with left:
@@ -115,6 +125,7 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
                 metric,
                 selected_country,
                 treemap_level=st.session_state.page1_treemap_level,
+                country_row=country_row,
             ),
             width="stretch",
             config=PLOTLY_CONFIG,
@@ -148,42 +159,28 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
                     st.session_state.page1_treemap_level = new_level
                     st.rerun()
             else:
-                # User clicked a country tile — stay on that country on first click
+                # User clicked a country tile
                 tree_country = _selected_country_from_event(tree_event)
                 if tree_country and tree_country in countries:
                     new_level = f"country:{tree_country}"
+                    already_at_country = st.session_state.page1_treemap_level == new_level
                     country_changed = tree_country != st.session_state.page1_country_select
-                    level_changed = st.session_state.page1_treemap_level != new_level
-                    if country_changed or level_changed:
+                    if already_at_country and not country_changed:
+                        # Second click on the same country tile: Plotly zooms out to region.
+                        # Mirror that by resetting level to the region so the stats panel hides.
+                        country_region = None
+                        match_rows = filtered[filtered["country"].eq(tree_country)]
+                        if not match_rows.empty and "region" in match_rows.columns:
+                            country_region = match_rows.iloc[0]["region"]
+                        if country_region:
+                            st.session_state.page1_treemap_level = f"region:{country_region}"
+                        else:
+                            st.session_state.page1_treemap_level = ""
+                        st.rerun()
+                    elif country_changed or not already_at_country:
                         st.session_state.page1_treemap_level = new_level
                         st.session_state.page1_pending_country = tree_country
                         st.rerun()
-
-    # Show a rich country info panel when a non-World country is selected
-    if selected_country and selected_country != "World":
-        country_row = country_df.loc[
-            country_df["country"].eq(selected_country) & country_df["year"].eq(year)
-        ]
-        if not country_row.empty:
-            row = country_row.iloc[0]
-            st.markdown(f"---")
-            st.markdown(f"### 📍 {selected_country} — {year}")
-            info_cols = st.columns(4)
-            def _fmt(val, fmt=".2f", suffix=""):
-                return f"{val:{fmt}}{suffix}" if pd.notna(val) else "N/A"
-            with info_cols[0]:
-                st.metric("Total CO₂", _fmt(row.get("co2", float("nan")), ".1f", " Mt"))
-            with info_cols[1]:
-                st.metric("CO₂ per capita", _fmt(row.get("co2_per_capita", float("nan")), ".2f", " t/person"))
-            with info_cols[2]:
-                st.metric("Share of world CO₂", _fmt(row.get("share_of_world_co2", float("nan")), ".2f", "%"))
-            with info_cols[3]:
-                pop = row.get("population", float("nan"))
-                if pd.notna(pop):
-                    pop_display = f"{pop/1e6:.1f}M" if pop >= 1e6 else f"{pop:,.0f}"
-                else:
-                    pop_display = "N/A"
-                st.metric("Population", pop_display)
 
     top = get_top_emitters(filtered, year, metric, 10)
     section_header("Country Ranking", "Sorted bars preserve precise comparison.", "Ranking")

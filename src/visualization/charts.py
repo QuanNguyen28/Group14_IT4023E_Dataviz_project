@@ -80,10 +80,23 @@ def _with_region_label(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: int, metric: str = "co2", selected_country: str | None = None, treemap_level: str | None = None):
+def _fmt_stat(val, fmt=".2f", suffix=""):
+    """Format a single stat value, returning N/A for NaN."""
+    try:
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            return "N/A"
+        return f"{val:{fmt}}{suffix}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: int, metric: str = "co2", selected_country: str | None = None, treemap_level: str | None = None, country_row=None):
     # Power BI equivalent: Treemap visual with Region -> Country hierarchy.
     # treemap_level: the id of the node currently displayed as root (e.g. "region:Asia").
     #   Persisted in session state by the caller so the chart stays drilled in after reruns.
+    # country_row: optional pandas Series with stats for selected_country; when provided and
+    #   the treemap is drilled to a single country, the stats are rendered as annotations
+    #   inside the figure itself (bottom panel) instead of as a separate ribbon below.
     if metric not in country_df.columns:
         return _empty("Country Composition")
     df = country_df.loc[country_df["year"].eq(year)].dropna(subset=[metric]).copy()
@@ -160,9 +173,106 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
     if display_level:
         treemap_kwargs["level"] = display_level
 
+    # When drilled to a single country level, shrink the treemap tile area and
+    # use the freed space at the bottom to embed a stats panel as annotations.
+    show_stats_panel = (
+        country_row is not None
+        and selected_country
+        and selected_country != "World"
+        and display_level == f"country:{selected_country}"
+    )
+
+    CHART_HEIGHT = 420
+    # Treemap domain: paper coords (0–1). When stats are shown the tile gets the
+    # top 55 % of the plot area; the bottom 45 % is reserved for the stats panel.
+    if show_stats_panel:
+        treemap_kwargs["domain"] = {"x": [0, 1], "y": [0.42, 1]}
+
     fig = go.Figure(go.Treemap(**treemap_kwargs))
+
+    if show_stats_panel:
+        row = country_row
+        pop = row.get("population", float("nan"))
+        try:
+            pop_f = float(pop)
+            pop_display = f"{pop_f/1e6:.1f}M" if pop_f >= 1e6 else f"{pop_f:,.0f}"
+        except (TypeError, ValueError):
+            pop_display = "N/A"
+
+        co2_val    = _fmt_stat(row.get("co2",                float("nan")), ".1f", " Mt")
+        percap_val = _fmt_stat(row.get("co2_per_capita",     float("nan")), ".2f", " t/p")
+        share_val  = _fmt_stat(row.get("share_of_world_co2", float("nan")), ".2f", "%")
+
+        # Dark panel background (paper coords)
+        panel_y0, panel_y1 = 0.0, 0.40
+        fig.add_shape(
+            type="rect",
+            xref="paper", yref="paper",
+            x0=0, x1=1, y0=panel_y0, y1=panel_y1,
+            fillcolor="#0C2235",
+            line=dict(color="rgba(255,255,255,0.10)", width=1),
+            layer="below",
+        )
+
+        # Country label header inside panel
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=0.03, y=panel_y1 - 0.03,
+            text=f"<b>📍 {selected_country}</b>  ·  {year}",
+            showarrow=False,
+            font=dict(size=11, color="#8DE0B8", family="Avenir Next, Helvetica Neue, sans-serif"),
+            xanchor="left", yanchor="top",
+        )
+
+        # Four stat tiles — evenly spaced across the panel
+        stats = [
+            ("TOTAL CO₂",   co2_val),
+            ("PER CAPITA",  percap_val),
+            ("WORLD SHARE", share_val),
+            ("POPULATION",  pop_display),
+        ]
+        tile_w = 1 / len(stats)
+        tile_bg_y0 = panel_y0 + 0.03
+        tile_bg_y1 = panel_y1 - 0.12
+        tile_mid_y = (tile_bg_y0 + tile_bg_y1) / 2
+
+        for i, (label, value) in enumerate(stats):
+            cx = tile_w * i + tile_w * 0.1          # left edge of tile
+            cx_mid = tile_w * i + tile_w / 2        # horizontal centre
+
+            # Tile background
+            fig.add_shape(
+                type="rect",
+                xref="paper", yref="paper",
+                x0=tile_w * i + 0.015,
+                x1=tile_w * (i + 1) - 0.015,
+                y0=tile_bg_y0,
+                y1=tile_bg_y1,
+                fillcolor="rgba(255,255,255,0.07)",
+                line=dict(color="rgba(255,255,255,0.10)", width=1),
+                layer="below",
+            )
+            # Stat label (small, muted)
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                x=cx_mid, y=tile_mid_y + 0.055,
+                text=label,
+                showarrow=False,
+                font=dict(size=9, color="#94A3B8", family="Avenir Next, Helvetica Neue, sans-serif"),
+                xanchor="center", yanchor="middle",
+            )
+            # Stat value (large, bright)
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                x=cx_mid, y=tile_mid_y - 0.03,
+                text=f"<b>{value}</b>",
+                showarrow=False,
+                font=dict(size=14, color="#F4F7FB", family="Avenir Next, Helvetica Neue, sans-serif"),
+                xanchor="center", yanchor="middle",
+            )
+
     fig.update_layout(title=title)
-    return apply_common_layout(fig, 420)
+    return apply_common_layout(fig, CHART_HEIGHT)
 
 
 def create_top_emitters_bar(df: pd.DataFrame, metric: str = "co2", title: str = "Top Countries", height: int = 390):
