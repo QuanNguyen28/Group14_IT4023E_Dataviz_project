@@ -68,6 +68,18 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         region = st.selectbox("Region", regions)
         selected_fuel_region = st.selectbox("Fuel Region", fuel_options, index=fuel_default_index)
 
+        # ── Time range slider moved to sidebar ──────────────────────────────
+        st.markdown("#### Fuel Share Comparison Window")
+        s_min, s_max, s_default_start, s_default_end = _fuel_share_year_range(
+            fuel_long, selected_fuel_region
+        )
+        slope_start, slope_end = st.select_slider(
+            "Year range",
+            options=list(range(s_min, s_max + 1)),
+            value=(s_default_start, s_default_end),
+            help="Drag the handles to choose the start and end years for the slope graph and fuel mix area chart.",
+        )
+
     y_label = "GDP Per Capita"
     y_metric = "gdp_per_capita"
 
@@ -80,6 +92,7 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         ("Y-axis", y_label),
         ("Region", region),
         ("Fuel region", selected_fuel_region),
+        ("Fuel years", f"{slope_start}–{slope_end}"),
     ])
 
     # ── Scatter section ──────────────────────────────────────────────────────
@@ -101,30 +114,21 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
     # ── Fuel mix section ─────────────────────────────────────────────────────
     section_header(
         "Fuel Mix Decomposition",
-        "Left: absolute stacked area of emissions by source. Right: slope graph showing how each fuel's share shifted between two chosen years.",
+        "Left: absolute stacked area of emissions by source (filtered to selected year range). Right: slope graph showing how each fuel's share shifted between the two chosen years.",
         "Decomposition",
-    )
-
-    # Year-range slider — scoped to years with actual fuel-share data for this region
-    s_min, s_max, s_default_start, s_default_end = _fuel_share_year_range(
-        fuel_long, selected_fuel_region
-    )
-
-    slope_start, slope_end = st.select_slider(
-        "Fuel share comparison window",
-        options=list(range(s_min, s_max + 1)),
-        value=(s_default_start, s_default_end),
-        help="Drag the handles to choose the start and end years for the slope graph.",
     )
 
     fuel_change = compute_fuel_share_change_range(
         fuel_long, selected_fuel_region, slope_start, slope_end
     )
 
+    # Filter fuel_long to selected time range for the area chart
+    fuel_long_filtered = fuel_long[fuel_long["year"].between(slope_start, slope_end)] if not fuel_long.empty else fuel_long
+
     bottom_left, bottom_right = st.columns([1.55, 0.85])
     with bottom_left:
         st.plotly_chart(
-            create_fuel_decomposition_area(fuel_long, selected_fuel_region),
+            create_fuel_decomposition_area(fuel_long_filtered, selected_fuel_region),
             width="stretch",
             config=PLOTLY_CONFIG,
         )

@@ -36,51 +36,80 @@ def _selected_country_from_event(event) -> str | None:
     if not points:
         return None
     point = points[0]
+    # customdata[0] is the primary source — set explicitly on both the choropleth
+    # main trace (maps.py) and the treemap trace (charts.py).
     customdata = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
     if customdata is not None and len(customdata) > 0:
         country = customdata[0]
         return country if country != "World" else None
+    # Fallback: treemap uses "label"; choropleth map exposes hover_name as "hovertext".
     label = point.get("label") if isinstance(point, dict) else getattr(point, "label", None)
-    return label if label and label != "World" else None
+    if label and label != "World":
+        return label
+    hovertext = point.get("hovertext") if isinstance(point, dict) else getattr(point, "hovertext", None)
+    return hovertext if hovertext and hovertext != "World" else None
 
 
 def render_global_snapshot(country_df, aggregate_df) -> None:
     page_header("GLOBAL SNAPSHOT", "What does the world look like today?", "#D94C45", "Current-state overview")
     years, regions, _, countries = common_filter_values(country_df)
     year = max(years)
+
+    # ── Session-state initialisation ─────────────────────────────────────────
     if "page1_country_select" not in st.session_state:
         st.session_state.page1_country_select = "World"
-    # page1_treemap_level: the treemap node id shown as root (e.g. "country:China" or
-    # "region:Asia"). Saved across reruns so the chart doesn't snap to root on rerun.
     if "page1_treemap_level" not in st.session_state:
         st.session_state.page1_treemap_level = ""
+
+    # ── Resolve any pending country pushed by map/treemap click ──────────────
+    # A click sets page1_pending_country then calls st.rerun(). On the next
+    # run we consume it here, before the sidebar widget renders, so the
+    # selectbox picks up the new value via its key.
     pending_country = st.session_state.pop("page1_pending_country", None)
-    if pending_country in countries:
+    if pending_country and pending_country in countries:
         st.session_state.page1_country_select = pending_country
+        # Always force the treemap to jump to that country when a click drives the change.
+        st.session_state.page1_treemap_level = f"country:{pending_country}"
+
+    # ── Sidebar filters ───────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown("### Filters")
         metric_label = st.radio("Metric", ["Total CO2", "CO2 Per Capita"], horizontal=True)
         region = st.selectbox("Region", regions)
-        selected_country = st.selectbox(
+        # The selectbox is bound to page1_country_select via its key.
+        # Changing it here (user types/picks) will update session_state on rerun.
+        st.selectbox(
             "Selected Country",
             countries,
             key="page1_country_select",
         )
+
     metric = "co2" if metric_label == "Total CO2" else "co2_per_capita"
     filtered = _filter(country_df, region)
+
+    # Read the authoritative country value from session state (covers both
+    # sidebar-driven changes and map/treemap-driven changes).
     selected_country = st.session_state.page1_country_select
 
-    # If the selected country changed via sidebar/map, update the treemap level to match.
-    # When no country is selected, always reset to root so the stats panel disappears.
+    # ── Keep treemap in sync with the sidebar dropdown ────────────────────────
+    # When the user changes the country via the sidebar (not via a chart click),
+    # there is no pending_country, so we sync the treemap level here.
+    # We always follow the sidebar value: jump straight to the country tile
+    # (or clear to root if "World" is selected).
     if not selected_country or selected_country == "World":
         st.session_state.page1_treemap_level = ""
     else:
         expected_level = f"country:{selected_country}"
         if st.session_state.page1_treemap_level != expected_level:
+            # Only override if we're not already drilling into this country.
+            # This preserves a region-level drill-down only when the country
+            # hasn't changed (i.e. the user is browsing the region context).
             current_level = st.session_state.page1_treemap_level
-            if not current_level.startswith("region:"):
+            currently_at_same_country = current_level == expected_level
+            if not currently_at_same_country:
                 st.session_state.page1_treemap_level = expected_level
 
+    # ── KPIs and filter summary ───────────────────────────────────────────────
     kpis = compute_global_kpis(country_df, aggregate_df, year, selected_country)
     filter_summary([
         ("Selected Year", year),
@@ -100,7 +129,9 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         if not _cr.empty:
             country_row = _cr.iloc[0]
 
+    # ── Map + Treemap ─────────────────────────────────────────────────────────
     left, right = st.columns([1.25, 1])
+
     with left:
         map_event = st.plotly_chart(
             create_choropleth_map(filtered, year, metric, selected_country),
@@ -111,11 +142,14 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
             selection_mode="points",
         )
         map_country = _selected_country_from_event(map_event)
-        if map_country and map_country in countries and map_country != st.session_state.page1_country_select:
-            st.session_state.page1_pending_country = map_country
-            # Also update treemap level to jump straight to this country
-            st.session_state.page1_treemap_level = f"country:{map_country}"
-            st.rerun()
+        if map_country and map_country in countries:
+            if map_country != st.session_state.page1_country_select:
+                # Map click → update country filter AND treemap simultaneously.
+                st.session_state.page1_pending_country = map_country
+                # page1_treemap_level is set when pending_country is consumed
+                # at the top of the next run, so we don't need to set it here.
+                st.rerun()
+
     with right:
         tree_event = st.plotly_chart(
             create_treemap(
@@ -133,6 +167,7 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
             on_select="rerun",
             selection_mode="points",
         )
+
         # Parse what was clicked in the treemap
         raw_points = []
         if tree_event:
@@ -144,8 +179,6 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         if raw_points:
             point = raw_points[0]
             customdata = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
-            label = point.get("label") if isinstance(point, dict) else getattr(point, "label", None)
-            point_id = point.get("id") if isinstance(point, dict) else getattr(point, "id", None)
 
             is_region_click = (
                 customdata is not None and len(customdata) >= 2
@@ -153,35 +186,35 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
             )
 
             if is_region_click:
-                # User clicked a region tile — drill into that region
+                # User clicked a region tile — drill into that region in the treemap.
+                # Does NOT change the country filter.
                 new_level = f"region:{customdata[0]}"
                 if st.session_state.page1_treemap_level != new_level:
                     st.session_state.page1_treemap_level = new_level
                     st.rerun()
             else:
-                # User clicked a country tile
+                # User clicked a country tile → update both country filter AND map.
                 tree_country = _selected_country_from_event(tree_event)
                 if tree_country and tree_country in countries:
                     new_level = f"country:{tree_country}"
                     already_at_country = st.session_state.page1_treemap_level == new_level
                     country_changed = tree_country != st.session_state.page1_country_select
+
                     if already_at_country and not country_changed:
-                        # Second click on the same country tile: Plotly zooms out to region.
-                        # Mirror that by resetting level to the region so the stats panel hides.
+                        # Second click on the same country tile: zoom out to region.
                         country_region = None
                         match_rows = filtered[filtered["country"].eq(tree_country)]
                         if not match_rows.empty and "region" in match_rows.columns:
                             country_region = match_rows.iloc[0]["region"]
-                        if country_region:
-                            st.session_state.page1_treemap_level = f"region:{country_region}"
-                        else:
-                            st.session_state.page1_treemap_level = ""
+                        st.session_state.page1_treemap_level = f"region:{country_region}" if country_region else ""
                         st.rerun()
-                    elif country_changed or not already_at_country:
+                    else:
+                        # Treemap click → update country filter (drives map highlight too).
                         st.session_state.page1_treemap_level = new_level
                         st.session_state.page1_pending_country = tree_country
                         st.rerun()
 
+    # ── Rankings bar ─────────────────────────────────────────────────────────
     top = get_top_emitters(filtered, year, metric, 10)
     section_header("Country Ranking", "Sorted bars preserve precise comparison.", "Ranking")
     st.plotly_chart(create_top_emitters_bar(top, metric, f"Top 10 Countries by {metric_label}"), width="stretch", config=PLOTLY_CONFIG)

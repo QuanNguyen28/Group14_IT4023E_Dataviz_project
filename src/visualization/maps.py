@@ -39,6 +39,14 @@ def create_choropleth_map(df: pd.DataFrame, year: int, metric: str = "co2", sele
             "share_of_world_co2": ":.1f",
         }.items() if col in work.columns
     }
+    # Build customdata with country name at index 0 so _selected_country_from_event
+    # can reliably extract it from map-click events.
+    customdata_cols = ["country", "region_label"]
+    for col in ["co2", "co2_per_capita", "share_of_world_co2", "population"]:
+        if col in work.columns and col not in customdata_cols:
+            customdata_cols.append(col)
+    work_customdata = work[customdata_cols].to_numpy()
+
     fig = px.choropleth(
         work,
         locations="iso_code",
@@ -49,7 +57,13 @@ def create_choropleth_map(df: pd.DataFrame, year: int, metric: str = "co2", sele
         labels={**FRIENDLY_LABELS, "region_label": "Region"},
         title=title,
     )
-    fig.update_traces(marker_line_color="rgba(255,255,255,.72)", marker_line_width=.45)
+    # Attach customdata after creation so country is always at customdata[0].
+    fig.update_traces(
+        customdata=work_customdata,
+        marker_line_color="rgba(255,255,255,.72)",
+        marker_line_width=.45,
+        selector=dict(type="choropleth"),
+    )
 
     if selected_country and selected_country != "World":
         selected = work[work["country"].eq(selected_country)]
