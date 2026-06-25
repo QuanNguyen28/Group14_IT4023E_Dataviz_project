@@ -80,10 +80,8 @@ def _with_region_label(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: int, metric: str = "co2", selected_country: str | None = None, treemap_level: str | None = None):
+def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: int, metric: str = "co2", selected_country: str | None = None):
     # Power BI equivalent: Treemap visual with Region -> Country hierarchy.
-    # treemap_level: the id of the node currently displayed as root (e.g. "region:Asia").
-    #   Persisted in session state by the caller so the chart stays drilled in after reruns.
     if metric not in country_df.columns:
         return _empty("Country Composition")
     df = country_df.loc[country_df["year"].eq(year)].dropna(subset=[metric]).copy()
@@ -105,27 +103,11 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
     ]
     line_colors = ["rgba(255,255,255,.78)"] * len(labels)
     line_widths = [1.2] * len(labels)
-
-    # Determine the region of the selected country (used for level if not explicitly provided)
-    selected_region_id = None
     if selected_country and selected_country in set(df["country"]):
         selected_index = len(regions) + df["country"].tolist().index(selected_country)
         line_colors[selected_index] = NAVY
         line_widths[selected_index] = 4
         colors[selected_index] = "#4B5563"
-        # Derive the region id for this country so we can drill into it
-        country_region = df.loc[df["country"].eq(selected_country), "region_label"].iloc[0]
-        selected_region_id = f"region:{country_region}"
-
-    # Decide which level to display:
-    # 1. Use explicitly-saved treemap_level (preserves the user's last drill-down position).
-    # 2. Fall back to the selected country's region.
-    # 3. If neither applies, show the root (empty string = Plotly default).
-    display_level = treemap_level or selected_region_id or ""
-
-    # Validate: the level id must actually exist in our ids list; reset to root if stale.
-    if display_level and display_level not in ids:
-        display_level = ""
 
     country_customdata = np.stack([
         df["country"],
@@ -138,7 +120,7 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
     region_customdata = np.array([[region, region, region_values.get(region, 0), np.nan, np.nan, np.nan] for region in regions], dtype=object)
     customdata = np.vstack([region_customdata, country_customdata])
 
-    treemap_kwargs = dict(
+    fig = go.Figure(go.Treemap(
         labels=labels,
         ids=ids,
         parents=parents,
@@ -157,10 +139,7 @@ def create_treemap(country_df: pd.DataFrame, regional_df: pd.DataFrame, year: in
             "<extra></extra>"
         ),
     )
-    if display_level:
-        treemap_kwargs["level"] = display_level
-
-    fig = go.Figure(go.Treemap(**treemap_kwargs))
+    )
     fig.update_layout(title=title)
     return apply_common_layout(fig, 420)
 
@@ -458,6 +437,10 @@ def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita", hi
     else:
         fig.update_yaxes(title=y_axis_title, type="linear", range=[y_low, y_high])
 
+    quadrant_labels = _BUBBLE_CHART_META.get(y_metric, _BUBBLE_CHART_META["co2_per_capita"])["quadrants"]
+    for x, y, text in quadrant_labels:
+        fig.add_annotation(x=x, y=y, xref="paper", yref="paper", text=text, showarrow=False, align="center", font=dict(color="#334155", size=11), bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, borderpad=4)
+
     # FIX 2: label top emitters by volume + CAGR outliers (not just CAGR extremes)
     if highlight_extremes > 0 and len(work) > 1:
         n = min(highlight_extremes, len(work) // 2 or 1)
@@ -487,13 +470,13 @@ def create_bubble_scatter(df: pd.DataFrame, y_metric: str = "co2_per_capita", hi
 
 
 
-def create_growth_volume_scatter(df, label_n=0):
+def create_growth_volume_scatter(df, label_n=4):
     """Scatter: x = CO2 growth rate (CAGR), y = total CO2 volume (Gt).
 
     Uniform dot size — position alone carries the information.
     Colour encodes region.
     FIX 1: Log scale on y-axis to spread the long tail of emission volumes.
-    FIX 2: Label top emitters by volume + CAGR outliers (only when label_n > 0).
+    FIX 2: Label top emitters by volume + CAGR outliers.
     FIX 3: Quadrant split at median of raw Gt values (converted to log space).
     FIX 4: Opacity lowered from 0.82 → 0.62 for better overlap visibility.
     """
@@ -545,25 +528,36 @@ def create_growth_volume_scatter(df, label_n=0):
                       fillcolor=f"rgba(12,34,53,{alpha})", line_width=0, layer="below")
     fig.add_vline(x=0, line_dash="dot", line_color="#697791")
     fig.add_hline(y=y_med_log, line_dash="dot", line_color="#697791")
-    # FIX 2: label top emitters by volume + CAGR outliers (only when label_n > 0)
-    if label_n > 0 and len(work) > 1:
-        n = min(label_n, max(1, len(work) // 4))
-        top_volume = work.nlargest(n, "co2_gt")
-        cagr_extremes = pd.concat([
-            work.nlargest(n, "co2_cagr"),
-            work.nsmallest(n, "co2_cagr"),
-        ])
-        to_label = pd.concat([top_volume, cagr_extremes]).drop_duplicates(subset=["country"]).sort_values("co2_cagr")
-        for i, (_, row) in enumerate(to_label.iterrows()):
-            ay = -22 if i % 2 == 0 else 22
-            fig.add_annotation(
-                x=row["co2_cagr"], y=row["co2_gt_log"],
-                text=_short_country_label(str(row["country"]), max_len=14),
-                showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor="#9AA7BC",
-                ax=0, ay=ay,
-                font=dict(size=9.5, color=NAVY),
-                bgcolor="rgba(255,255,255,.92)", bordercolor="#D8E2EE", borderwidth=1, borderpad=2,
-            )
+    for xp, yp, text in [
+        (0.74, 0.88, "Large emitter<br>growing"),
+        (0.26, 0.88, "Large emitter<br>declining"),
+        (0.74, 0.14, "Small emitter<br>growing"),
+        (0.26, 0.14, "Small emitter<br>declining"),
+    ]:
+        fig.add_annotation(
+            x=xp, y=yp, xref="paper", yref="paper",
+            text=text, showarrow=False, align="center",
+            font=dict(color="#334155", size=10.5),
+            bgcolor="rgba(255,255,255,.78)", bordercolor="#D8E2EE", borderwidth=1, borderpad=4,
+        )
+    # FIX 2: label top emitters by volume + CAGR outliers
+    n = min(label_n, max(1, len(work) // 4))
+    top_volume = work.nlargest(n, "co2_gt")
+    cagr_extremes = pd.concat([
+        work.nlargest(n, "co2_cagr"),
+        work.nsmallest(n, "co2_cagr"),
+    ])
+    to_label = pd.concat([top_volume, cagr_extremes]).drop_duplicates(subset=["country"]).sort_values("co2_cagr")
+    for i, (_, row) in enumerate(to_label.iterrows()):
+        ay = -22 if i % 2 == 0 else 22
+        fig.add_annotation(
+            x=row["co2_cagr"], y=row["co2_gt_log"],
+            text=_short_country_label(str(row["country"]), max_len=14),
+            showarrow=True, arrowhead=0, arrowwidth=1, arrowcolor="#9AA7BC",
+            ax=0, ay=ay,
+            font=dict(size=9.5, color=NAVY),
+            bgcolor="rgba(255,255,255,.92)", bordercolor="#D8E2EE", borderwidth=1, borderpad=2,
+        )
     # FIX 1: human-readable log ticks on y-axis
     tick_vals_gt = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 20]
     tick_vals_log = [np.log10(v) for v in tick_vals_gt if y_min_log <= np.log10(v) <= y_max_log]
@@ -642,129 +636,27 @@ def create_fuel_decomposition_area(fuel_long: pd.DataFrame, region: str):
 
 
 
-def create_fuel_slope_graph(change_df: pd.DataFrame) -> go.Figure:
-    """Slope graph comparing fuel share (%) at start vs end year.
-
-    Each fuel source is drawn as a line connecting its share at the left
-    (start_year) to its share at the right (end_year).  Colour encodes fuel
-    type; endpoint dots carry a label with the share value.  Lines that went
-    up are solid; lines that went down are dashed.
-    """
-    if change_df.empty or "start_share" not in change_df.columns:
+def create_fuel_share_change_table_or_panel(change_df: pd.DataFrame):
+    if change_df.empty:
         return _empty("Fuel Share Change")
-
-    start_year = int(change_df["start_year"].iloc[0])
-    end_year   = int(change_df["end_year"].iloc[0])
-
-    # Drop fuels that are zero at both endpoints — nothing to show
-    work = change_df[
-        (change_df["start_share"] > 0) | (change_df["end_share"] > 0)
-    ].copy()
-    if work.empty:
-        return _empty("Fuel Share Change")
-
-    fig = go.Figure()
-
-    for _, row in work.iterrows():
-        fuel   = row["fuel_source"]
-        s_val  = row["start_share"]
-        e_val  = row["end_share"]
-        delta  = row["change_pp"]
-        color  = FUEL_COLORS.get(fuel, "#8A94A6")
-        dash   = "solid" if delta >= 0 else "dash"
-        arrow  = "▲" if delta > 0.05 else ("▼" if delta < -0.05 else "●")
-
-        # Connecting slope line
-        fig.add_trace(go.Scatter(
-            x=[0, 1],
-            y=[s_val, e_val],
-            mode="lines+markers",
-            name=fuel,
-            line=dict(color=color, width=2.2, dash=dash),
-            marker=dict(size=8, color=color, line=dict(color="white", width=1.5)),
-            hovertemplate=(
-                f"<b>{fuel}</b><br>"
-                f"{start_year}: %{{customdata[0]:.1f}}%<br>"
-                f"{end_year}: %{{customdata[1]:.1f}}%<br>"
-                f"Change: %{{customdata[2]:+.1f}} pp"
-                "<extra></extra>"
-            ),
-            customdata=[[s_val, e_val, delta], [s_val, e_val, delta]],
-            showlegend=True,
-            legendgroup=fuel,
-        ))
-
-        # Left endpoint label  (right-aligned, just left of x=0)
-        fig.add_annotation(
-            x=0, y=s_val,
-            text=f"<b>{s_val:.1f}%</b>",
-            xanchor="right",
-            xshift=-10,
-            showarrow=False,
-            font=dict(size=10, color=color),
-        )
-        # Right endpoint label  (left-aligned, just right of x=1)
-        fig.add_annotation(
-            x=1, y=e_val,
-            text=f"<b>{e_val:.1f}%</b> {arrow}",
-            xanchor="left",
-            xshift=10,
-            showarrow=False,
-            font=dict(size=10, color=color),
-        )
-
-    # Year-axis labels at exactly x=0 and x=1
-    fig.add_annotation(
-        x=0, y=1.04, xref="x", yref="paper",
-        text=f"<b>{start_year}</b>",
-        showarrow=False, xanchor="center",
-        font=dict(size=12, color=NAVY),
-    )
-    fig.add_annotation(
-        x=1, y=1.04, xref="x", yref="paper",
-        text=f"<b>{end_year}</b>",
-        showarrow=False, xanchor="center",
-        font=dict(size=12, color=NAVY),
-    )
-
-    # Vertical reference lines at the two poles
-    for xv in [0, 1]:
-        fig.add_shape(
-            type="line", xref="x", yref="paper",
-            x0=xv, x1=xv, y0=0, y1=1,
-            line=dict(color="#D0D9E6", width=1.4),
-        )
-
-    fig.update_xaxes(
-        range=[-0.35, 1.35],
-        showticklabels=False,
-        showgrid=False,
-        zeroline=False,
-        visible=False,
-    )
-    fig.update_yaxes(
-        title="Share of regional CO2 (%)",
-        range=[
-            max(0, work[["start_share", "end_share"]].min().min() - 6),
-            min(105, work[["start_share", "end_share"]].max().max() + 8),
-        ],
-        showgrid=True,
-        gridcolor="#EAF0F6",
-        zeroline=False,
-        ticksuffix="%",
-    )
-    fig.update_layout(
-        title=f"Fuel Share: {start_year} → {end_year}",
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.12,
-            xanchor="center",
-            x=0.5,
-            bgcolor="rgba(255,255,255,.78)",
-            bordercolor="#D8E2EE",
-            borderwidth=1,
-            font=dict(size=10),
+    colors = ["#0F8B5F" if v >= 0 else "#D94C45" for v in change_df["change_pp"]]
+    row_fills = [["#FFFFFF" if i % 2 == 0 else "#F7FAFD" for i in range(len(change_df))] for _ in range(4)]
+    fig = go.Figure(data=[go.Table(
+        columnwidth=[1.45, .8, .8, .9],
+        header=dict(
+            values=["Fuel", "Start", "End", "Change"],
+            fill_color="#EAF1F8",
+            line_color="#D8E2EE",
+            align="left",
+            font=dict(color=NAVY, size=12),
+            height=34,
         ),
-    )
-    return _with_chart_margins(apply_common_layout(fig, 440), l=62, r=62, t=72, b=96)
+        cells=dict(values=[
+            change_df["fuel_source"],
+            change_df["start_share"].map(lambda v: f"{v:.0f}%"),
+            change_df["end_share"].map(lambda v: f"{v:.0f}%"),
+            change_df["change_pp"].map(lambda v: f"{v:+.0f} pp"),
+        ], align="left", height=32, fill_color=row_fills, line_color="#D8E2EE", font=dict(color=[NAVY, NAVY, NAVY, colors], size=12)),
+    )])
+    fig.update_layout(title="Fuel Share Change", height=440, margin=dict(l=8, r=8, t=56, b=8), paper_bgcolor="rgba(0,0,0,0)")
+    return fig

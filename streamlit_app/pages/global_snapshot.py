@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
+import pandas as pd
 
 from src.analysis.metrics import compute_global_kpis
 from src.analysis.rankings import compute_regional_totals, get_top_emitters
@@ -49,6 +50,10 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     year = max(years)
     if "page1_country_select" not in st.session_state:
         st.session_state.page1_country_select = "World"
+    # page1_treemap_level: the treemap node id shown as root (e.g. "country:China" or
+    # "region:Asia"). Saved across reruns so the chart doesn't snap to root on rerun.
+    if "page1_treemap_level" not in st.session_state:
+        st.session_state.page1_treemap_level = ""
     pending_country = st.session_state.pop("page1_pending_country", None)
     if pending_country in countries:
         st.session_state.page1_country_select = pending_country
@@ -64,6 +69,16 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
     metric = "co2" if metric_label == "Total CO2" else "co2_per_capita"
     filtered = _filter(country_df, region)
     selected_country = st.session_state.page1_country_select
+
+    # If the selected country changed via sidebar/map, update the treemap level to match
+    if selected_country and selected_country != "World":
+        expected_level = f"country:{selected_country}"
+        if st.session_state.page1_treemap_level != expected_level:
+            # Only auto-update the level when a new country is actively selected
+            # (not when the user manually navigated the treemap to a region)
+            current_level = st.session_state.page1_treemap_level
+            if not current_level.startswith("region:"):
+                st.session_state.page1_treemap_level = expected_level
 
     kpis = compute_global_kpis(country_df, aggregate_df, year, selected_country)
     filter_summary([
@@ -88,20 +103,87 @@ def render_global_snapshot(country_df, aggregate_df) -> None:
         map_country = _selected_country_from_event(map_event)
         if map_country and map_country in countries and map_country != st.session_state.page1_country_select:
             st.session_state.page1_pending_country = map_country
+            # Also update treemap level to jump straight to this country
+            st.session_state.page1_treemap_level = f"country:{map_country}"
             st.rerun()
     with right:
         tree_event = st.plotly_chart(
-            create_treemap(filtered, compute_regional_totals(aggregate_df, year), year, metric, selected_country),
+            create_treemap(
+                filtered,
+                compute_regional_totals(aggregate_df, year),
+                year,
+                metric,
+                selected_country,
+                treemap_level=st.session_state.page1_treemap_level,
+            ),
             width="stretch",
             config=PLOTLY_CONFIG,
             key="page1_region_treemap",
             on_select="rerun",
             selection_mode="points",
         )
-        tree_country = _selected_country_from_event(tree_event)
-        if tree_country and tree_country in countries and tree_country != st.session_state.page1_country_select:
-            st.session_state.page1_pending_country = tree_country
-            st.rerun()
+        # Parse what was clicked in the treemap
+        raw_points = []
+        if tree_event:
+            if isinstance(tree_event, dict):
+                raw_points = tree_event.get("selection", {}).get("points", [])
+            elif hasattr(tree_event, "selection"):
+                raw_points = tree_event.selection.points
+
+        if raw_points:
+            point = raw_points[0]
+            customdata = point.get("customdata") if isinstance(point, dict) else getattr(point, "customdata", None)
+            label = point.get("label") if isinstance(point, dict) else getattr(point, "label", None)
+            point_id = point.get("id") if isinstance(point, dict) else getattr(point, "id", None)
+
+            is_region_click = (
+                customdata is not None and len(customdata) >= 2
+                and customdata[0] == customdata[1]
+            )
+
+            if is_region_click:
+                # User clicked a region tile — drill into that region
+                new_level = f"region:{customdata[0]}"
+                if st.session_state.page1_treemap_level != new_level:
+                    st.session_state.page1_treemap_level = new_level
+                    st.rerun()
+            else:
+                # User clicked a country tile — stay on that country on first click
+                tree_country = _selected_country_from_event(tree_event)
+                if tree_country and tree_country in countries:
+                    new_level = f"country:{tree_country}"
+                    country_changed = tree_country != st.session_state.page1_country_select
+                    level_changed = st.session_state.page1_treemap_level != new_level
+                    if country_changed or level_changed:
+                        st.session_state.page1_treemap_level = new_level
+                        st.session_state.page1_pending_country = tree_country
+                        st.rerun()
+
+    # Show a rich country info panel when a non-World country is selected
+    if selected_country and selected_country != "World":
+        country_row = country_df.loc[
+            country_df["country"].eq(selected_country) & country_df["year"].eq(year)
+        ]
+        if not country_row.empty:
+            row = country_row.iloc[0]
+            st.markdown(f"---")
+            st.markdown(f"### 📍 {selected_country} — {year}")
+            info_cols = st.columns(4)
+            def _fmt(val, fmt=".2f", suffix=""):
+                return f"{val:{fmt}}{suffix}" if pd.notna(val) else "N/A"
+            with info_cols[0]:
+                st.metric("Total CO₂", _fmt(row.get("co2", float("nan")), ".1f", " Mt"))
+            with info_cols[1]:
+                st.metric("CO₂ per capita", _fmt(row.get("co2_per_capita", float("nan")), ".2f", " t/person"))
+            with info_cols[2]:
+                st.metric("Share of world CO₂", _fmt(row.get("share_of_world_co2", float("nan")), ".2f", "%"))
+            with info_cols[3]:
+                pop = row.get("population", float("nan"))
+                if pd.notna(pop):
+                    pop_display = f"{pop/1e6:.1f}M" if pop >= 1e6 else f"{pop:,.0f}"
+                else:
+                    pop_display = "N/A"
+                st.metric("Population", pop_display)
 
     top = get_top_emitters(filtered, year, metric, 10)
     section_header("Country Ranking", "Sorted bars preserve precise comparison.", "Ranking")

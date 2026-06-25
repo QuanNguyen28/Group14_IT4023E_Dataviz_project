@@ -95,6 +95,54 @@ def compute_fuel_share_change(fuel_long: pd.DataFrame, region: str) -> pd.DataFr
     return out.sort_values("fuel_source", key=lambda s: s.map(order).fillna(99))
 
 
+def compute_fuel_share_change_range(
+    fuel_long: pd.DataFrame, region: str, start_year: int, end_year: int
+) -> pd.DataFrame:
+    """Fuel-share comparison between two user-chosen years.
+
+    Snaps each requested year to the nearest available year with non-zero data,
+    so the caller doesn't need to guard against gaps in the raw dataset.
+
+    Returns one row per fuel source with columns:
+        fuel_source, start_share, end_share, change_pp, start_year, end_year
+    """
+    shares = compute_fuel_shares(fuel_long, region)
+    if shares.empty:
+        return pd.DataFrame(
+            columns=["fuel_source", "start_share", "end_share", "change_pp", "start_year", "end_year"]
+        )
+    valid_years = sorted(
+        shares.loc[shares["share"].notna() & shares["share"].gt(0), "year"].unique()
+    )
+    if len(valid_years) < 2:
+        return pd.DataFrame(
+            columns=["fuel_source", "start_share", "end_share", "change_pp", "start_year", "end_year"]
+        )
+
+    def _snap(y: int, candidates: list) -> int:
+        return min(candidates, key=lambda c: abs(c - y))
+
+    actual_start = _snap(start_year, valid_years)
+    actual_end = _snap(end_year, valid_years)
+    if actual_start >= actual_end:
+        actual_start, actual_end = valid_years[0], valid_years[-1]
+
+    start = (
+        shares.loc[shares["year"].eq(actual_start), ["fuel_source", "share"]]
+        .rename(columns={"share": "start_share"})
+    )
+    end = (
+        shares.loc[shares["year"].eq(actual_end), ["fuel_source", "share"]]
+        .rename(columns={"share": "end_share"})
+    )
+    out = end.merge(start, on="fuel_source", how="outer").fillna(0)
+    out["change_pp"] = out["end_share"] - out["start_share"]
+    out["start_year"] = actual_start
+    out["end_year"] = actual_end
+    order = {name: i for i, name in enumerate(FUEL_COLUMNS.values())}
+    return out.sort_values("fuel_source", key=lambda s: s.map(order).fillna(99))
+
+
 def generate_page_1_insights(kpis: dict, top_emitters: pd.DataFrame, regional_totals: pd.DataFrame, selected_country: str) -> list[str]:
     insights = []
     if kpis.get("largest_emitter") != "No data":

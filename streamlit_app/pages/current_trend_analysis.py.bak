@@ -11,15 +11,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from src.analysis.trends import (
-    compute_country_trends,
-    compute_fuel_share_change_range,
-    compute_fuel_shares,
-)
+from src.analysis.trends import compute_country_trends, compute_fuel_share_change
 from src.visualization.charts import (
-    create_bubble_scatter,
-    create_fuel_decomposition_area,
-    create_fuel_slope_graph,
+    create_bubble_scatter, create_fuel_decomposition_area, create_fuel_share_change_table_or_panel,
     create_growth_volume_scatter,
 )
 from streamlit_app.components.layout import PLOTLY_CONFIG, filter_summary, page_header, section_header
@@ -39,19 +33,6 @@ def _fuel_region_options(regions, fuel_long):
     return options, options.index(default)
 
 
-def _fuel_share_year_range(fuel_long, region):
-    """Return (min_year, max_year, default_start, default_end) for the slope slider."""
-    shares = compute_fuel_shares(fuel_long, region)
-    if shares.empty:
-        return 1990, 2024, 2000, 2024
-    valid = shares.loc[shares["share"].notna() & shares["share"].gt(0), "year"]
-    if valid.empty:
-        return 1990, 2024, 2000, 2024
-    y_min, y_max = int(valid.min()), int(valid.max())
-    default_start = max(y_min, y_max - 30)   # sensible 30-year default window
-    return y_min, y_max, default_start, y_max
-
-
 def render_current_trend_analysis(country_df, fuel_long) -> None:
     page_header("CURRENT TREND ANALYSIS", "Who is changing fastest today?", "#D94C45", "Momentum scanner")
     years, regions, _, _ = common_filter_values(country_df)
@@ -59,7 +40,6 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
     earliest = min(years)
     base_year, end_year = 2022, 2024
     fuel_options, fuel_default_index = _fuel_region_options(regions, fuel_long)
-
     with st.sidebar:
         st.markdown("### Filters")
         if earliest > base_year or latest < end_year:
@@ -67,13 +47,13 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
             return
         region = st.selectbox("Region", regions)
         selected_fuel_region = st.selectbox("Fuel Region", fuel_options, index=fuel_default_index)
-
     y_label = "GDP Per Capita"
     y_metric = "gdp_per_capita"
 
     trends = compute_country_trends(country_df, base_year, end_year)
     if region != "All" and "region" in trends:
         trends = trends[trends["region"].eq(region)]
+    fuel_change = compute_fuel_share_change(fuel_long, selected_fuel_region)
 
     filter_summary([
         ("Window", f"{base_year}-{end_year}"),
@@ -81,11 +61,9 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         ("Region", region),
         ("Fuel region", selected_fuel_region),
     ])
-
-    # ── Scatter section ──────────────────────────────────────────────────────
     section_header(
         "Growth Rate & Emissions Profile",
-        "Left: growth vs wealth (bubble size = volume). Right: growth rate vs absolute volume.",
+        "Left: growth vs wealth (bubble size = volume). Right: growth rate vs absolute volume — uniform dots, position is the signal.",
         "Signal Scan",
     )
     top_left, top_right = st.columns([1, 1])
@@ -93,44 +71,14 @@ def render_current_trend_analysis(country_df, fuel_long) -> None:
         st.plotly_chart(create_bubble_scatter(trends, y_metric), width="stretch", config=PLOTLY_CONFIG)
     with top_right:
         st.plotly_chart(
-            create_growth_volume_scatter(trends, label_n=0),
+            create_growth_volume_scatter(trends, label_n=4),
             width="stretch",
             config=PLOTLY_CONFIG,
         )
 
-    # ── Fuel mix section ─────────────────────────────────────────────────────
-    section_header(
-        "Fuel Mix Decomposition",
-        "Left: absolute stacked area of emissions by source. Right: slope graph showing how each fuel's share shifted between two chosen years.",
-        "Decomposition",
-    )
-
-    # Year-range slider — scoped to years with actual fuel-share data for this region
-    s_min, s_max, s_default_start, s_default_end = _fuel_share_year_range(
-        fuel_long, selected_fuel_region
-    )
-
-    slope_start, slope_end = st.select_slider(
-        "Fuel share comparison window",
-        options=list(range(s_min, s_max + 1)),
-        value=(s_default_start, s_default_end),
-        help="Drag the handles to choose the start and end years for the slope graph.",
-    )
-
-    fuel_change = compute_fuel_share_change_range(
-        fuel_long, selected_fuel_region, slope_start, slope_end
-    )
-
-    bottom_left, bottom_right = st.columns([1.55, 0.85])
+    section_header("Fuel Mix Decomposition", "An absolute stacked area chart shows how the selected region's emissions sources have grown or shrunk in real volume.", "Decomposition")
+    bottom_left, bottom_right = st.columns([1.55, .85])
     with bottom_left:
-        st.plotly_chart(
-            create_fuel_decomposition_area(fuel_long, selected_fuel_region),
-            width="stretch",
-            config=PLOTLY_CONFIG,
-        )
+        st.plotly_chart(create_fuel_decomposition_area(fuel_long, selected_fuel_region), width="stretch", config=PLOTLY_CONFIG)
     with bottom_right:
-        st.plotly_chart(
-            create_fuel_slope_graph(fuel_change),
-            width="stretch",
-            config=PLOTLY_CONFIG,
-        )
+        st.plotly_chart(create_fuel_share_change_table_or_panel(fuel_change), width="stretch", config=PLOTLY_CONFIG)
